@@ -16,20 +16,22 @@ const HOUSE = {
 };
 const D = (dollars) => dollars * 100;
 
-test("payouts always sum exactly to the pool and stay $5-clean", () => {
+test("payouts always sum exactly to the pool (to the cent, no rounding)", () => {
   for (const n of [1, 3, 5, 6, 8, 10, 11, 15, 20, 45]) {
     const pool = n * D(35);
     const { amounts } = computePayouts(HOUSE, n, pool);
     assert.equal(amounts.reduce((a, b) => a + b, 0), pool, `field ${n} sum`);
-    for (const a of amounts) assert.equal(a % 500, 0, `field ${n} step-clean`);
+    for (const a of amounts) assert.ok(Number.isInteger(a), `field ${n} integer cents`);
   }
 });
 
-test("known payout values (buy-in $35)", () => {
+test("known payout values, exact to the cent (buy-in $35)", () => {
   assert.deepEqual(computePayouts(HOUSE, 5, D(175)).amounts, [D(175)]);
-  assert.deepEqual(computePayouts(HOUSE, 8, D(280)).amounts, [D(195), D(85)]);
+  // 70/30 of $280 -> 2nd = $84.00, 1st absorbs -> $196.00
+  assert.deepEqual(computePayouts(HOUSE, 8, D(280)).amounts, [D(196), D(84)]);
   assert.deepEqual(computePayouts(HOUSE, 10, D(350)).amounts, [D(245), D(105)]);
-  assert.deepEqual(computePayouts(HOUSE, 11, D(385)).amounts, [D(170), D(135), D(80)]);
+  // 45/35/20 of $385 -> 3rd $77, 2nd $134.75, 1st $173.25
+  assert.deepEqual(computePayouts(HOUSE, 11, D(385)).amounts, [17325, 13475, 7700]);
   assert.deepEqual(computePayouts(HOUSE, 20, D(700)).amounts, [D(315), D(245), D(140)]);
 });
 
@@ -47,8 +49,8 @@ test("assignPayouts maps place-amounts to finishers, unpaid get 0", () => {
   ];
   const { assignments } = assignPayouts(HOUSE, 8, D(280), players);
   const byId = Object.fromEntries(assignments.map((a) => [a.player_id, a.payout_cents]));
-  assert.equal(byId[2], D(195)); // winner
-  assert.equal(byId[1], D(85));  // 2nd
+  assert.equal(byId[2], D(196)); // winner
+  assert.equal(byId[1], D(84));  // 2nd
   assert.equal(byId[3], 0);      // 3rd unpaid in a 2-place field
 });
 
@@ -65,8 +67,8 @@ test("progressive entry: recording only the bust-outs pays no one", () => {
   // Then the winner and runner-up land -> they get paid, 6th/7th/8th still 0.
   const full = assignPayouts(HOUSE, 8, D(280), [...players, { player_id: 9, finish_position: 1 }, { player_id: 10, finish_position: 2 }]);
   const byId = Object.fromEntries(full.assignments.map((a) => [a.player_id, a.payout_cents]));
-  assert.equal(byId[9], D(195));
-  assert.equal(byId[10], D(85));
+  assert.equal(byId[9], D(196));
+  assert.equal(byId[10], D(84));
   assert.equal(byId[1], 0);
 });
 

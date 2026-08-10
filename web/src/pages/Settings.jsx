@@ -5,7 +5,6 @@ const ORD = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
 const sumPct = (places) => places.reduce((s, p) => s + (Number(p) || 0), 0);
 
 export default function Settings() {
-  const [step, setStep] = useState(5);        // dollars
   const [tiers, setTiers] = useState(null);   // [{min, max(''|num), places:[num...]}]
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -16,7 +15,6 @@ export default function Settings() {
   useEffect(() => {
     api.get("/payout-structure").then((s) => {
       const p = s?.payload;
-      setStep((p?.step_cents ?? 500) / 100);
       setTiers((p?.tiers || []).map((t) => ({ min: t.min, max: t.max ?? "", places: [...t.places] })));
     }).catch((e) => setErr(e.message));
     api.get("/settings/clubgg-allocation").then((r) => setAlloc((r.allocation_cents / 100).toString())).catch(() => {});
@@ -43,7 +41,6 @@ export default function Settings() {
     setErr(""); setMsg(""); setBusy(true);
     try {
       const body = {
-        step_cents: Math.round(Number(step) * 100),
         tiers: tiers.map((t) => ({
           min: Number(t.min),
           max: t.max === "" || t.max === null ? null : Number(t.max),
@@ -52,7 +49,6 @@ export default function Settings() {
       };
       const res = await api.put("/payout-structure", body);
       const p = res.payload;
-      setStep(p.step_cents / 100);
       setTiers(p.tiers.map((t) => ({ min: t.min, max: t.max ?? "", places: [...t.places] })));
       setMsg("Payout structure saved. It applies to tournaments finalized from now on.");
       setTimeout(() => setMsg(""), 6000);
@@ -71,16 +67,9 @@ export default function Settings() {
         <h2>Payout structure</h2>
         <p className="sub" style={{ marginTop: 4 }}>
           How each tournament's prize pool splits, by field size (total entries incl. re-entries).
-          Lower places round up to the step below; the winner absorbs the remainder so payouts always
-          sum exactly to the pool.
+          Each place is paid its exact percentage to the cent; the winner absorbs the sub-cent
+          remainder so payouts always sum exactly to the pool.
         </p>
-
-        <div className="row" style={{ margin: "14px 0 4px", alignItems: "flex-end", gap: 12 }}>
-          <div style={{ width: 220 }}>
-            <label>Round lower places up to nearest $</label>
-            <input type="number" min="1" step="1" value={step} onChange={(e) => setStep(e.target.value)} />
-          </div>
-        </div>
 
         {tiers.map((t, i) => {
           const s = sumPct(t.places);

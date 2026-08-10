@@ -9,7 +9,8 @@ const tierSchema = z.object({
   places: z.array(z.number().positive()).min(1).max(8),
 });
 const putBody = z.object({
-  step_cents: z.number().int().min(1).max(100000),
+  // step_cents is legacy (payouts are now exact to the cent); accepted but ignored.
+  step_cents: z.number().int().min(1).max(100000).optional(),
   tiers: z.array(tierSchema).min(1),
 });
 
@@ -44,8 +45,7 @@ export default async function settingsRoutes(app) {
 
     const payload = {
       type: "tiered_percent",
-      step_cents: b.step_cents,
-      rounding: "up_lower_places_winner_absorbs",
+      rounding: "exact_cent_winner_absorbs",
       field_by: "total_entries",
       tiers: sorted.map((t) => ({ min: t.min, max: t.max, places: t.places })),
     };

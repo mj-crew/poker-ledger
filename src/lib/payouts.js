@@ -1,9 +1,10 @@
 // Payout engine. Money in integer cents. Pure functions, no I/O.
 //
 // Consumes a payout_structures.payload of the "tiered_percent" shape:
-//   { type:"tiered_percent", step_cents:500,
-//     rounding:"up_lower_places_winner_absorbs", field_by:"entries",
+//   { type:"tiered_percent", field_by:"entries",
 //     tiers:[ {min,max,places:[pct,...]}, ... ] }
+// Payouts are exact to the cent (no $-step rounding); the winner absorbs the
+// sub-cent remainder so the places always sum to the pool.
 
 /**
  * Field size for tier selection = TOTAL entries incl. re-entries across all players.
@@ -35,13 +36,13 @@ export function tierFor(structure, fieldSize) {
 
 /**
  * Compute the real-cash payout for each paid place.
- * Rule: lower places round UP to nearest step; the winner takes the remainder
- * so payouts always sum EXACTLY to the pool and stay step-clean.
+ * Rule: each lower place is its exact percentage of the pool, rounded to the
+ * nearest cent; the winner takes the remainder so payouts always sum EXACTLY
+ * to the pool (to the cent — no dollar-step rounding).
  *
  * @returns {{ amounts:number[], warnings:string[] }} amounts[0] = 1st place.
  */
 export function computePayouts(structure, fieldSize, poolCents) {
-  const step = structure.step_cents ?? 500;
   const pct = tierFor(structure, fieldSize).places;
   const warnings = [];
 
@@ -51,19 +52,18 @@ export function computePayouts(structure, fieldSize, poolCents) {
   const amounts = new Array(pct.length);
   let others = 0;
   for (let i = 1; i < pct.length; i++) {
-    const raw = (poolCents * pct[i]) / 100;
-    amounts[i] = Math.ceil(raw / step) * step; // round UP to nearest step
+    amounts[i] = Math.round((poolCents * pct[i]) / 100); // exact to the cent
     others += amounts[i];
   }
-  amounts[0] = poolCents - others; // winner absorbs the remainder
+  amounts[0] = poolCents - others; // winner absorbs the sub-cent remainder
 
   if (amounts[0] < 0) {
     warnings.push(
-      `Pool ${poolCents}c too small for ${pct.length} paid places at step ${step}c — winner share is negative.`
+      `Pool ${poolCents}c too small for ${pct.length} paid places — winner share is negative.`
     );
   } else if (amounts[0] < amounts[1]) {
     warnings.push(
-      `Winner share (${amounts[0]}c) is below 2nd place (${amounts[1]}c) after rounding — check field size / pool.`
+      `Winner share (${amounts[0]}c) is below 2nd place (${amounts[1]}c) — check field size / pool.`
     );
   }
   return { amounts, warnings };

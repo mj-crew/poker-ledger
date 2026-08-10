@@ -6,13 +6,12 @@
 --   1-5   -> 1 place  (100%)
 --   6-10  -> 2 places (65/35)
 --   11+   -> 3 places (50/30/20)
--- Lower places round UP to nearest $5; winner absorbs the remainder (zero-sum).
+-- Paid exact to the cent (no rounding); winner absorbs the sub-cent remainder (zero-sum).
 INSERT INTO payout_structures (name, payload, is_default) VALUES (
   'House standard',
   '{
      "type": "tiered_percent",
-     "step_cents": 500,
-     "rounding": "up_lower_places_winner_absorbs",
+     "rounding": "exact_cent_winner_absorbs",
      "field_by": "total_entries",
      "tiers": [
        {"min": 1,  "max": 5,    "places": [100]},
