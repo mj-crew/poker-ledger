@@ -15,6 +15,7 @@ export default async function authRoutes(app) {
     if (!p || !p.active || !(await verifyPassword(password, p.password_hash))) {
       return reply.code(401).send({ error: "Invalid username or password" });
     }
+    await query("UPDATE players SET last_login_at=now(), last_seen_at=now() WHERE id=$1", [p.id]);
     const token = app.jwt.sign({ id: p.id, name: p.name, role: p.role }, { expiresIn: "30d" });
     return {
       token,
@@ -22,6 +23,9 @@ export default async function authRoutes(app) {
                 capabilities: p.capabilities, must_change_password: p.must_change_password },
     };
   });
+
+  // Lightweight heartbeat — the authenticate preHandler refreshes last_seen_at.
+  app.get("/ping", { preHandler: [app.authenticate] }, async () => ({ ok: true }));
 
   app.get("/me", { preHandler: [app.authenticate] }, async (req) => {
     const { rows } = await query(

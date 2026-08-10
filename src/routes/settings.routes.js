@@ -57,6 +57,17 @@ export default async function settingsRoutes(app) {
     return rows[0];
   });
 
+  // Login activity: last login (exact) + online (active in the last 3 min).
+  app.get("/activity", { preHandler: [app.authenticate, requireCap("settings.manage")] }, async () => {
+    const { rows } = await query(
+      `SELECT id, name, username, role, last_login_at, last_seen_at,
+              (last_seen_at IS NOT NULL AND last_seen_at > now() - interval '3 minutes') AS online
+       FROM players
+       ORDER BY online DESC, last_seen_at DESC NULLS LAST, name`
+    );
+    return rows;
+  });
+
   // ClubGG weekly chip allocation (real $ per player, re-allocated each Monday).
   app.get("/settings/clubgg-allocation", { preHandler: [app.authenticate] }, async () => {
     const r = await query("SELECT value_cents FROM app_settings WHERE key='clubgg_allocation_cents'");

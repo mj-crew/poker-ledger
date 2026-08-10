@@ -80,6 +80,16 @@ export const fmtDateTime = (d) => {
   return `${fmtDate(x)} ${x.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 };
 
+// Relative "time ago" for activity views.
+export function timeAgo(d) {
+  if (!d) return "never";
+  const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
+  if (s < 45) return "just now";
+  const m = Math.floor(s / 60); if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
+  const dd = Math.floor(h / 24); return dd === 1 ? "yesterday" : `${dd} days ago`;
+}
+
 // Monday–Sunday of the week containing `date`, as "dd/mm/yyyy - dd/mm/yyyy".
 export function weekRange(date = new Date()) {
   const day = date.getDay(); // 0=Sun..6=Sat

@@ -23,6 +23,12 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Heartbeat so "currently logged in" stays fresh (refreshes last_seen server-side).
+  useEffect(() => {
+    const t = setInterval(() => { if (getToken()) api.get("/auth/ping").catch(() => {}); }, 60000);
+    return () => clearInterval(t);
+  }, []);
+
   async function login(username, password) {
     const { token, player } = await api.post("/auth/login", { username, password });
     localStorage.setItem("pl_token", token);

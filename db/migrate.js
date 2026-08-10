@@ -58,6 +58,9 @@ async function main() {
     // Simple key/value app settings (integer cents). Holds the ClubGG allocation.
     "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value_cents INTEGER NOT NULL)",
     "INSERT INTO app_settings (key, value_cents) VALUES ('clubgg_allocation_cents', 200000) ON CONFLICT (key) DO NOTHING",
+    // Login activity: exact last login, and last-seen (any authed request) for "online".
+    "ALTER TABLE players ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ",
+    "ALTER TABLE players ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ",
   ];
   for (const a of alters) await pool.query(a);
 

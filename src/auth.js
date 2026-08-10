@@ -16,6 +16,11 @@ export async function authenticate(req, reply) {
   } catch {
     return reply.code(401).send({ error: "Not authenticated" });
   }
+  // Refresh "last seen" for the online view — throttled to ~1/min, fire-and-forget.
+  query(
+    "UPDATE players SET last_seen_at=now() WHERE id=$1 AND (last_seen_at IS NULL OR last_seen_at < now() - interval '1 minute')",
+    [req.user.id]
+  ).catch(() => {});
 }
 
 // Load the acting player's live role + capabilities from the DB (always fresh,
