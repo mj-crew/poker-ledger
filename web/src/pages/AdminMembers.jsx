@@ -126,6 +126,7 @@ function EditMemberModal({ p, me, isSuper, catalog, onClose, patch }) {
   const [first, setFirst] = useState(p.first_name || "");
   const [last, setLast] = useState(p.last_name || "");
   const [phone, setPhone] = useState(p.phone || "");
+  const [username, setUsername] = useState(p.username || "");
   const [clubgg, setClubgg] = useState(p.clubgg_handle || "");
   const [role, setRole] = useState(p.role);
   const [active, setActive] = useState(p.active);
@@ -141,7 +142,7 @@ function EditMemberModal({ p, me, isSuper, catalog, onClose, patch }) {
   async function save() {
     setBusy(true); setErr("");
     try {
-      const body = { first_name: first, last_name: last, phone, clubgg_handle: clubgg, active };
+      const body = { first_name: first, last_name: last, phone, username, clubgg_handle: clubgg, active };
       if (editableRole && role !== p.role) body.role = role;
       await patch(p.id, body);
       onClose();
@@ -166,13 +167,13 @@ function EditMemberModal({ p, me, isSuper, catalog, onClose, patch }) {
           <h2 style={{ margin: 0 }}>Edit {p.first_name}</h2>
           <button className="right ghost small" onClick={onClose}>✕</button>
         </div>
-        <p className="sub" style={{ margin: "0 0 12px" }}>Shown across the app as <strong>{first || p.first_name} [{p.username}]</strong></p>
+        <p className="sub" style={{ margin: "0 0 12px" }}>Shown across the app as <strong>{first || p.first_name} [{username || p.username}]</strong></p>
 
         <div className="grid c2">
           <div><label>First name</label><input value={first} onChange={(e) => setFirst(e.target.value)} /></div>
           <div><label>Last name</label><input value={last} onChange={(e) => setLast(e.target.value)} placeholder="members only" /></div>
           <div><label>Phone</label><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="members only" /></div>
-          <div><label>PokerStars screen name</label><input value={p.username} disabled /></div>
+          <div><label>PokerStars screen name</label><input value={username} onChange={(e) => setUsername(e.target.value)} /></div>
           <div><label>ClubGG name</label><input value={clubgg} onChange={(e) => setClubgg(e.target.value)} placeholder="—" /></div>
         </div>
 

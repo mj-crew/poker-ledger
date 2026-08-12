@@ -58,6 +58,7 @@ export default async function playerRoutes(app) {
     first_name: z.string().min(1).optional(),
     last_name: z.string().optional(),
     phone: z.string().optional(),
+    username: z.string().min(1).optional(), // PokerStars screen name = login + club handle
     role: z.enum(["superadmin", "admin", "player"]).optional(),
     capabilities: z.array(z.string()).optional(),
     active: z.boolean().optional(),
@@ -71,7 +72,7 @@ export default async function playerRoutes(app) {
     const id = Number(req.params.id);
     const b = patchBody.parse(req.body);
     const actor = await loadActor(req);
-    const target = (await query("SELECT id, role FROM players WHERE id=$1", [id])).rows[0];
+    const target = (await query("SELECT id, role, username FROM players WHERE id=$1", [id])).rows[0];
     if (!target) return reply.code(404).send({ error: "Not found" });
 
     const touchesPermissions = b.role !== undefined || b.capabilities !== undefined;
@@ -96,7 +97,17 @@ export default async function playerRoutes(app) {
       const clean = [...new Set(b.capabilities.filter((c) => CAPABILITY_KEYS.includes(c)))];
       await query("UPDATE players SET capabilities=$1::jsonb WHERE id=$2", [JSON.stringify(clean), id]);
     }
-    if (b.first_name !== undefined || b.last_name !== undefined) {
+    if (b.username !== undefined && b.username.trim() && b.username.trim() !== target.username) {
+      const newU = b.username.trim();
+      const taken = await query("SELECT 1 FROM players WHERE lower(username)=lower($1) AND id<>$2", [newU, id]);
+      if (taken.rowCount) return reply.code(409).send({ error: "That PokerStars screen name is already taken." });
+      await query("UPDATE players SET username=$1 WHERE id=$2", [newU, id]);
+      // Keep the club handle (used for screenshot matching) in sync with it.
+      await query("DELETE FROM handle_aliases WHERE player_id=$1 AND platform='club'", [id]);
+      await query("INSERT INTO handle_aliases (player_id, platform, handle) VALUES ($1,'club',$2)", [id, newU]);
+    }
+    // Rebuild the display label whenever the name or screen name changes.
+    if (b.first_name !== undefined || b.last_name !== undefined || b.username !== undefined) {
       await query(
         "UPDATE players SET first_name=COALESCE($1,first_name), last_name=COALESCE($2,last_name), name=COALESCE($1,first_name) || ' [' || username || ']' WHERE id=$3",
         [b.first_name ?? null, b.last_name ?? null, id]
