@@ -3,6 +3,47 @@ import { api, fmt, fmtDate, fmtDateTime } from "../api";
 import { useAuth } from "../auth.jsx";
 import LifePill, { phaseOf } from "../components/LifePill.jsx";
 import ScreenshotButton from "../components/ScreenshotButton.jsx";
+import TournamentStatus from "../components/TournamentStatus.jsx";
+
+const MEDAL = ["🥇", "🥈", "🥉", "4th", "5th"];
+
+// Condensed, portrait card of what's running — for screenshotting into WhatsApp.
+function ShareCard({ rows, now }) {
+  const running = rows.filter((t) => t.phase !== "completed");
+  return (
+    <div className="sharewrap">
+      <div className="sharecard" id="share-card">
+        <div className="sc-head">
+          <img className="sc-logo" src="/logo.png" alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          <div>
+            <div className="sc-brand">Flawless Poker <span className="suit">9♦&nbsp;4♦</span></div>
+            <div className="sc-when">{fmtDate(new Date())}</div>
+          </div>
+        </div>
+        {running.length === 0 ? (
+          <div className="sc-empty">No tournaments running right now.</div>
+        ) : running.map((t) => (
+          <div className="sc-item" key={t.id}>
+            <div className="sc-game">{t.game_type || "Tournament"} <span className="sc-type">· {t.tournament_type}</span></div>
+            <div className="sc-meta">
+              <span>💵 Buy-in <b>{fmt(t.buyin_cents)}</b></span>
+              <span>👥 <b className="pos">{t.entries}</b></span>
+              <span>🏆 Pool <b className="prize">{fmt(t.pool_cents)}</b></span>
+            </div>
+            {t.places?.length > 0 && (
+              <div className="sc-pay">
+                {t.places.map((p) => (
+                  <span key={p.place}>{MEDAL[p.place - 1] || `${p.place}.`}&nbsp;<b className="prize">{fmt(p.amount_cents)}</b></span>
+                ))}
+              </div>
+            )}
+            <div className="sc-status"><TournamentStatus t={t} now={now} /></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const TYPES = ["Regular", "Satellite", "Freeroll", "Bounty", "Mixed Game", "Other"];
 const localDate = (d = new Date()) =>
@@ -13,6 +54,9 @@ export default function AdminTournaments() {
   const [tournaments, setTournaments] = useState(null);
   const [roster, setRoster] = useState([]);
   const [err, setErr] = useState("");
+  const [live, setLive] = useState({ tournaments: [] });
+  const [now, setNow] = useState(Date.now());
+  const [showShare, setShowShare] = useState(false);
 
   async function load() {
     try {
@@ -21,6 +65,15 @@ export default function AdminTournaments() {
     } catch (e) { setErr(e.message); }
   }
   useEffect(() => { load(); }, []);
+
+  // Live feed (+ 1s tick) drives the share card's pools/entries/countdowns.
+  useEffect(() => {
+    const loadLive = () => api.get("/live").then(setLive).catch(() => {});
+    loadLive();
+    const p = setInterval(loadLive, 5000);
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => { clearInterval(p); clearInterval(t); };
+  }, []);
 
   if (err) return <div className="err">{err}</div>;
   if (!tournaments) return <p className="muted">Loading…</p>;
@@ -32,7 +85,20 @@ export default function AdminTournaments() {
 
       {can("nights.manage") && <CreateTournament reload={load} />}
 
-      <h2 style={{ marginTop: 20 }}>Active tournaments</h2>
+      <div className="row" style={{ marginTop: 20, flexWrap: "wrap", gap: 8 }}>
+        <h2 style={{ margin: 0 }}>Active tournaments</h2>
+        <span className="right">
+          <button className="ghost small" onClick={() => setShowShare((s) => !s)}>
+            {showShare ? "Hide share card" : "📱 Share card"}
+          </button>
+        </span>
+      </div>
+      {showShare && (
+        <>
+          <p className="sub" style={{ margin: "8px 0 0" }}>Condensed view of what's running — screenshot it for the group chat.</p>
+          <ShareCard rows={live.tournaments || []} now={now} />
+        </>
+      )}
       {(() => {
         const active = tournaments.filter((t) => t.status !== "finalized");
         if (active.length === 0) return <div className="card muted">No active tournaments — completed ones are on the <a href="/results">Results</a> tab.</div>;
