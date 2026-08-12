@@ -133,6 +133,13 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: va
 .sc-status { margin-top: 9px; }
 .sc-empty { color: var(--muted); text-align: center; padding: 18px 0; }
 
+/* ---- Modal ---- */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-start;
+  justify-content: center; padding: 6vh 16px 16px; z-index: 100; overflow-y: auto; }
+.modal { width: 520px; max-width: 100%; background: var(--surface-2); border: 1px solid var(--line-2);
+  border-radius: 14px; padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.modal input:disabled { opacity: .6; }
+
 /* ---- Tables ---- */
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.fixed { table-layout: fixed; }

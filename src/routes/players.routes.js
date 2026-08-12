@@ -7,23 +7,27 @@ export default async function playerRoutes(app) {
   // Everyone authed can see the roster (incl. role + capabilities for the admin UI).
   app.get("/", { preHandler: [app.authenticate] }, async () => {
     const { rows } = await query(
-      `SELECT p.id, p.name, p.username, p.role, p.capabilities, p.active, p.clubgg_balance_cents,
+      `SELECT p.id, p.name, p.first_name, p.last_name, p.phone, p.username, p.role, p.capabilities, p.active, p.clubgg_balance_cents,
               COALESCE(array_agg(h.handle) FILTER (WHERE h.platform='club' AND h.handle IS NOT NULL), '{}') AS handles,
               MAX(h.handle) FILTER (WHERE h.platform='clubgg') AS clubgg_handle
        FROM players p LEFT JOIN handle_aliases h ON h.player_id=p.id
-       GROUP BY p.id ORDER BY p.name`
+       GROUP BY p.id ORDER BY p.first_name, p.last_name`
     );
     return rows;
   });
 
   const createBody = z.object({
-    name: z.string().min(1),
+    first_name: z.string().min(1),
+    last_name: z.string().optional().default(""),
+    phone: z.string().optional().default(""),
     username: z.string().min(1),
     role: z.enum(["admin", "player"]).default("player"),
     temp_password: z.string().min(6),
     club_handle: z.string().optional(),
     clubgg_handle: z.string().optional(),
   });
+  // Display label used everywhere except the Members section.
+  const label = (first, username) => `${first} [${username}]`;
 
   // Create an account. members.manage can create players; only the system
   // administrator can create admins.
@@ -35,9 +39,9 @@ export default async function playerRoutes(app) {
     if (exists.rowCount) return reply.code(409).send({ error: "Username already taken" });
     const hash = await hashPassword(b.temp_password);
     const { rows } = await query(
-      `INSERT INTO players (name, username, role, password_hash, must_change_password)
-       VALUES ($1,$2,$3,$4,TRUE) RETURNING id, name, username, role, capabilities, active`,
-      [b.name, b.username, b.role, hash]
+      `INSERT INTO players (first_name, last_name, phone, name, username, role, password_hash, must_change_password)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE) RETURNING id, name, first_name, last_name, phone, username, role, capabilities, active`,
+      [b.first_name, b.last_name ?? "", b.phone ?? "", label(b.first_name, b.username), b.username, b.role, hash]
     );
     const player = rows[0];
     await query(
@@ -51,6 +55,9 @@ export default async function playerRoutes(app) {
   });
 
   const patchBody = z.object({
+    first_name: z.string().min(1).optional(),
+    last_name: z.string().optional(),
+    phone: z.string().optional(),
     role: z.enum(["superadmin", "admin", "player"]).optional(),
     capabilities: z.array(z.string()).optional(),
     active: z.boolean().optional(),
@@ -89,6 +96,13 @@ export default async function playerRoutes(app) {
       const clean = [...new Set(b.capabilities.filter((c) => CAPABILITY_KEYS.includes(c)))];
       await query("UPDATE players SET capabilities=$1::jsonb WHERE id=$2", [JSON.stringify(clean), id]);
     }
+    if (b.first_name !== undefined || b.last_name !== undefined) {
+      await query(
+        "UPDATE players SET first_name=COALESCE($1,first_name), last_name=COALESCE($2,last_name), name=COALESCE($1,first_name) || ' [' || username || ']' WHERE id=$3",
+        [b.first_name ?? null, b.last_name ?? null, id]
+      );
+    }
+    if (b.phone !== undefined) await query("UPDATE players SET phone=$1 WHERE id=$2", [b.phone, id]);
     if (b.active !== undefined) await query("UPDATE players SET active=$1 WHERE id=$2", [b.active, id]);
     if (b.reset_password) {
       await query("UPDATE players SET password_hash=$1, must_change_password=TRUE WHERE id=$2",
@@ -100,7 +114,7 @@ export default async function playerRoutes(app) {
         await query("INSERT INTO handle_aliases (player_id, platform, handle) VALUES ($1,'clubgg',$2)", [id, b.clubgg_handle.trim()]);
     }
     const { rows } = await query(
-      "SELECT id, name, username, role, capabilities, active FROM players WHERE id=$1", [id]
+      "SELECT id, name, first_name, last_name, phone, username, role, capabilities, active FROM players WHERE id=$1", [id]
     );
     return rows[0];
   });

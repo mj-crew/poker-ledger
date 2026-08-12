@@ -31,7 +31,7 @@ function Activity() {
         <tbody>
           {rows.map((p) => (
             <tr key={p.id}>
-              <td>{p.name}<div className="muted" style={{ fontSize: 12 }}>{p.username}</div></td>
+              <td>{p.name}</td>
               <td className="ctr">{p.online
                 ? <span className="badge ok">● online</span>
                 : <span className="badge gray">offline</span>}</td>

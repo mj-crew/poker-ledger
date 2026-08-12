@@ -186,12 +186,8 @@ function TournamentCard({ t, roster, reload, can }) {
   const [err, setErr] = useState("");
 
   const available = roster.filter((r) => !rows.some((x) => x.player_id === r.id));
-  // Club screen name for a player (falls back to login username).
-  const screenName = (pid) => { const r = roster.find((x) => x.id === pid); return r?.handles?.[0] || r?.username || ""; };
-  const PlayerCell = ({ pid, name }) => {
-    const h = screenName(pid);
-    return <td><div>{name}</div>{h && <div className="muted" style={{ fontSize: 12 }}>{h}</div>}</td>;
-  };
+  // Name already includes the screen name as "First [PokerStars name]".
+  const PlayerCell = ({ name }) => <td>{name}</td>;
   const totalEntries = rows.reduce((s, r) => s + (+r.entries || 0) + (+r.reentries || 0), 0);
   const pool = rows.reduce((s, r) => s + ((+r.entries || 0) * t.buyin_cents + (+r.reentries || 0) * t.reentry_cents), 0);
   const paidCents = rows.reduce((s, r) => s + (chop
@@ -388,7 +384,7 @@ function TournamentCard({ t, roster, reload, can }) {
           {canLive && <>
             <select value={pick} onChange={(e) => setPick(e.target.value)} style={{ width: 200 }}>
               <option value="">Add player…</option>
-              {available.map((r) => <option key={r.id} value={r.id}>{r.name}{r.handles?.[0] ? ` (${r.handles[0]})` : ""}</option>)}
+              {available.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
             <button className="ghost small" onClick={addPlayer} disabled={!pick}>Add</button>
             <ScreenshotButton kind="entries" tournamentId={t.id} label="📷 Upload entries (end of rego)" onResult={applyEntries} />

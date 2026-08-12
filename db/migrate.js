@@ -61,6 +61,15 @@ async function main() {
     // Login activity: exact last login, and last-seen (any authed request) for "online".
     "ALTER TABLE players ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ",
     "ALTER TABLE players ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ",
+    // First/last name. `name` becomes the display label "First [PokerStars name]"
+    // used everywhere; last_name is shown only in the Members section.
+    "ALTER TABLE players ADD COLUMN IF NOT EXISTS first_name TEXT",
+    "ALTER TABLE players ADD COLUMN IF NOT EXISTS last_name TEXT",
+    "UPDATE players SET first_name = name WHERE first_name IS NULL",
+    "UPDATE players SET last_name = '' WHERE last_name IS NULL",
+    "UPDATE players SET name = first_name || ' [' || username || ']' WHERE position('[' in name) = 0",
+    // Phone number — Members section only.
+    "ALTER TABLE players ADD COLUMN IF NOT EXISTS phone TEXT",
   ];
   for (const a of alters) await pool.query(a);
 

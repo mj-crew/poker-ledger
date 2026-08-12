@@ -22,21 +22,23 @@ INSERT INTO payout_structures (name, payload, is_default) VALUES (
    TRUE
 );
 
--- Roster: name, login username (= PokerStars screen name), role.
-INSERT INTO players (name, username, role) VALUES
-  ('Noel',     'ThrowingBoos',  'player'),
-  ('Peter',    'BigTommyNuts',  'player'),
-  ('Michal',   'eMJey55',       'superadmin'),
-  ('Toby',     'Toby585',       'player'),
-  ('Pranav',   'Pranav0011',    'player'),
-  ('Dan',      'Heretoodohn8',  'player'),
-  ('Sleiman',  'SleimanM',      'player'),
-  ('Brahim',   'GrinderMB',     'player'),
-  ('George',   'KingG007',      'player'),
-  ('Will',     'Wavies1991',    'player'),
-  ('Henry',    '2ezdisgaim',    'player'),
-  ('Keegan',   '9K33GS6',       'player'),
-  ('Joe',      'flairwoo85',    'player');
+-- Roster: first_name, login username (= PokerStars screen name), role.
+-- `name` is set below to the display label "First [PokerStars name]".
+INSERT INTO players (first_name, last_name, name, username, role) VALUES
+  ('Noel',    '', 'Noel',    'ThrowingBoos',  'player'),
+  ('Peter',   '', 'Peter',   'BigTommyNuts',  'player'),
+  ('Michal',  '', 'Michal',  'eMJey55',       'superadmin'),
+  ('Toby',    '', 'Toby',    'Toby585',       'player'),
+  ('Pranav',  '', 'Pranav',  'Pranav0011',    'player'),
+  ('Dan',     '', 'Dan',     'Heretoodohn8',  'player'),
+  ('Sleiman', '', 'Sleiman', 'SleimanM',      'player'),
+  ('Brahim',  '', 'Brahim',  'GrinderMB',     'player'),
+  ('George',  '', 'George',  'KingG007',      'player'),
+  ('Will',    '', 'Will',    'Wavies1991',    'player'),
+  ('Henry',   '', 'Henry',   '2ezdisgaim',    'player'),
+  ('Keegan',  '', 'Keegan',  '9K33GS6',       'player'),
+  ('Joe',     '', 'Joe',     'flairwoo85',    'player');
+UPDATE players SET name = first_name || ' [' || username || ']';
 
 -- Club screen-names for screenshot matching (same as login username here).
 INSERT INTO handle_aliases (player_id, platform, handle)
