@@ -105,11 +105,7 @@ export default function AdminSettlement() {
 
   return (
     <>
-      <h1>Weekly Settlement</h1>
-      <p className="sub" style={{ marginBottom: 16 }}>
-        <strong>Lock</strong> freezes who pays whom. <strong>Start new week</strong> resets balances so the next week runs
-        clean (even if people haven't paid yet). <strong>Mark settled</strong> just records that everyone's squared up.
-      </p>
+      <h1 style={{ marginBottom: 16 }}>Weekly Settlement</h1>
 
       {can("settlement.lock") && cg && (
         <div className="card">
