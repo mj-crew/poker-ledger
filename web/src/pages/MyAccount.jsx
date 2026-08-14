@@ -47,7 +47,6 @@ export default function MyAccount() {
             <BrandIcon src="/pokerstars.png" glyph="♠" color="#d0021b" /> Pokerstars balance
           </span>
           <div className={"val " + tone(bal)}>{fmt(bal)}</div>
-          <span className="sub">{bal > 0 ? "Owed to you" : bal < 0 ? "You owe" : "All square"}</span>
         </div>
         <div className="card stat">
           <span className="lbl" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
