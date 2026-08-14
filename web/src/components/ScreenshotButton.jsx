@@ -1,14 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api, fileToImagePart } from "../api";
 
 // Upload a screenshot → Claude vision → structured data handed to onResult.
 // Two ways in: click the button and Ctrl+V a screenshot straight off the
-// clipboard (Win+Shift+S on Windows, Cmd+Ctrl+Shift+4 on macOS), or use the
-// small "file…" link to browse. kind: "setup" | "entries" | "results".
+// clipboard (Win+Shift+S on Windows, Cmd+Ctrl+Shift+4 on macOS), or Browse for
+// an image file. kind: "setup" | "entries" | "results".
 export default function ScreenshotButton({ kind, tournamentId, label = "📷 Upload screenshot", onResult }) {
   const [busy, setBusy] = useState(false);
   const [armed, setArmed] = useState(false); // focused → listening for a paste
   const [err, setErr] = useState("");
+  const fileRef = useRef(null);
 
   async function ingest(file) {
     if (!file) return;
@@ -41,7 +42,7 @@ export default function ScreenshotButton({ kind, tournamentId, label = "📷 Upl
   }, [armed, busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <span className="row" style={{ gap: 8, display: "inline-flex", alignItems: "center" }}>
+    <span className="shotbtn">
       <button
         type="button"
         className={"filebtn small" + (busy ? " disabled" : "") + (armed ? " armed" : "")}
@@ -50,12 +51,11 @@ export default function ScreenshotButton({ kind, tournamentId, label = "📷 Upl
         onBlur={() => setArmed(false)}
         title="Click, then press Ctrl+V to paste a screenshot"
       >
-        {busy ? "Reading…" : armed ? "⌨ Press Ctrl+V to paste…" : label}
+        {busy ? "Reading…" : armed ? "⌨ Ctrl+V to paste…" : label}
       </button>
-      <label className="filelink" title="Choose an image file instead">
-        file…
-        <input type="file" accept="image/*" onChange={pick} disabled={busy} style={{ display: "none" }} />
-      </label>
+      <button type="button" className="ghost small" disabled={busy} title="Choose an image file"
+        onClick={() => fileRef.current?.click()}>Browse</button>
+      <input ref={fileRef} type="file" accept="image/*" onChange={pick} disabled={busy} style={{ display: "none" }} />
       {err && <span className="err" style={{ margin: 0 }}>{err}</span>}
     </span>
   );

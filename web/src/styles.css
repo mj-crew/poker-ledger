@@ -197,6 +197,7 @@ tr:last-child td { border-bottom: none; }
 .center { min-height: 78vh; display: grid; place-items: center; }
 .authcard { width: 370px; max-width: 92vw; }
 .field + .field { margin-top: 14px; }
+.shotbtn { display:inline-flex; align-items:center; gap:8px; }
 .filebtn { display:inline-flex; align-items:center; cursor:pointer; font-weight:700; font-size:13px; padding:6px 12px; border-radius:9px; border:1px solid var(--line-2); color:var(--ink); background:transparent; white-space:nowrap; }
 .filebtn:hover { background: var(--surface-2); }
 .filebtn.disabled { opacity:.5; cursor:default; }
