@@ -152,8 +152,7 @@ function CreateTournament({ reload }) {
         <h2 style={{ margin: 0 }}>New tournament</h2>
         <span className="right"><ScreenshotButton kind="setup" label="📷 Upload lobby screenshot" onResult={applySetup} /></span>
       </div>
-      <p className="sub" style={{ margin: "6px 0 12px" }}>Screenshot fills game, format, buy-in (from the "$xx" in the name), start time and late reg. Double-check before adding.</p>
-      <form className="row" onSubmit={add} style={{ flexWrap: "wrap" }}>
+      <form className="row" onSubmit={add} style={{ flexWrap: "wrap", marginTop: 12 }}>
         <div><label>Game</label><input value={game} onChange={(e) => setGame(e.target.value)} /></div>
         <div><label>Type</label><select value={type} onChange={(e) => setType(e.target.value)}>{TYPES.map((x) => <option key={x}>{x}</option>)}</select></div>
         <div style={{ width: 110 }}><label>Buy-in $</label><input type="number" value={buyin} onChange={(e) => setBuyin(+e.target.value)} /></div>
