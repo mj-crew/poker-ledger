@@ -6,6 +6,15 @@ function StatusBadge({ t }) {
   return <span className={"badge " + st.cls}>{st.text}</span>;
 }
 
+// Loads a brand logo from /public; falls back to a coloured suit glyph if absent.
+function BrandIcon({ src, glyph, color }) {
+  const [ok, setOk] = useState(true);
+  return ok
+    ? <img src={src} alt="" onError={() => setOk(false)} style={{ height: 20, width: 20, objectFit: "contain", borderRadius: 4 }} />
+    : <span style={{ color, fontSize: 17, lineHeight: 1 }}>{glyph}</span>;
+}
+const tone = (c) => (c > 0 ? "pos" : c < 0 ? "neg" : "");
+
 export default function MyAccount() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
@@ -19,6 +28,8 @@ export default function MyAccount() {
   if (!data) return <p className="muted">Loading…</p>;
 
   const bal = data.balance_cents;
+  const gg = data.clubgg_interim_cents;         // may be null (no GG balance yet)
+  const total = bal + (gg || 0);
 
   async function act(id, path) {
     try { await api.post(`/settlements/${id}/${path}`); await load(); }
@@ -30,19 +41,23 @@ export default function MyAccount() {
       <h1>My Balance</h1>
       <div className="grid c3" style={{ marginTop: 16 }}>
         <div className="card stat">
-          <span className="lbl">Current balance</span>
-          <div className={"val " + (bal > 0 ? "pos" : bal < 0 ? "neg" : "")}>{fmt(bal)}</div>
+          <span className="lbl" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+            <BrandIcon src="/pokerstars.png" glyph="♠" color="#d0021b" /> Pokerstars balance
+          </span>
+          <div className={"val " + tone(bal)}>{fmt(bal)}</div>
           <span className="sub">{bal > 0 ? "Owed to you" : bal < 0 ? "You owe" : "All square"}</span>
         </div>
         <div className="card stat">
-          <span className="lbl">To pay (locked)</span>
-          <div className="val">{fmt(data.i_owe.filter(x => x.status !== "confirmed").reduce((s, x) => s + x.amount_cents, 0))}</div>
-          <span className="sub">{data.i_owe.filter(x => x.status !== "confirmed").length} transfer(s)</span>
+          <span className="lbl" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+            <BrandIcon src="/clubgg.png" glyph="♣" color="#e2e6ee" /> ClubGG balance
+          </span>
+          <div className="val">{gg != null ? fmt(gg) : "—"}</div>
+          <span className="sub">live chip stack</span>
         </div>
         <div className="card stat">
-          <span className="lbl">To receive (locked)</span>
-          <div className="val">{fmt(data.owed_to_me.filter(x => x.status !== "confirmed").reduce((s, x) => s + x.amount_cents, 0))}</div>
-          <span className="sub">{data.owed_to_me.filter(x => x.status !== "confirmed").length} transfer(s)</span>
+          <span className="lbl">Total balance</span>
+          <div className={"val " + tone(total)}>{fmt(total)}</div>
+          <span className="sub">Pokerstars + ClubGG</span>
         </div>
       </div>
 
