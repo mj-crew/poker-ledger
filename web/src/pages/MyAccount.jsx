@@ -7,11 +7,11 @@ function StatusBadge({ t }) {
 }
 
 // Loads a brand logo from /public; falls back to a coloured suit glyph if absent.
-function BrandIcon({ src, glyph, color }) {
+function BrandIcon({ src, glyph, color, size = 20 }) {
   const [ok, setOk] = useState(true);
   return ok
-    ? <img src={src} alt="" onError={() => setOk(false)} style={{ height: 20, width: 20, objectFit: "contain", borderRadius: 4 }} />
-    : <span style={{ color, fontSize: 17, lineHeight: 1 }}>{glyph}</span>;
+    ? <img src={src} alt="" onError={() => setOk(false)} style={{ height: size, width: "auto", maxWidth: size * 2.4, objectFit: "contain" }} />
+    : <span style={{ color, fontSize: size * 0.85, lineHeight: 1 }}>{glyph}</span>;
 }
 const tone = (c) => (c > 0 ? "pos" : c < 0 ? "neg" : "");
 
@@ -42,18 +42,20 @@ export default function MyAccount() {
     <>
       <h1>My Balance</h1>
       <div className="grid c3" style={{ marginTop: 16 }}>
-        <div className="card stat">
-          <span className="lbl" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-            <BrandIcon src="/pokerstars.png" glyph="♠" color="#d0021b" /> Pokerstars balance
-          </span>
-          <div className={"val " + tone(bal)}>{fmt(bal)}</div>
+        <div className="card stat balcard">
+          <div className="balmain">
+            <span className="lbl">Balance</span>
+            <div className={"val " + tone(bal)}>{fmt(bal)}</div>
+          </div>
+          <BrandIcon src="/pokerstars.png" glyph="♠" color="#d0021b" size={54} />
         </div>
-        <div className="card stat">
-          <span className="lbl" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-            <BrandIcon src="/clubgg.png" glyph="♣" color="#e2e6ee" /> ClubGG balance
-          </span>
-          <div className={"val " + tone(ggNet)}>{ggNet != null ? fmt(ggNet) : "—"}</div>
-          <span className="sub">{ggInterim != null ? `${fmt(ggInterim)} vs ${fmt(ggAlloc)} allocation` : "no balance yet"}</span>
+        <div className="card stat balcard">
+          <div className="balmain">
+            <span className="lbl">Balance</span>
+            <div className={"val " + tone(ggNet)}>{ggNet != null ? fmt(ggNet) : "—"}</div>
+            <span className="sub">{ggInterim != null ? `${fmt(ggInterim)} vs ${fmt(ggAlloc)} allocation` : "no balance yet"}</span>
+          </div>
+          <BrandIcon src="/clubgg.png" glyph="♣" color="#e2e6ee" size={54} />
         </div>
         <div className="card stat">
           <span className="lbl">Total balance</span>
