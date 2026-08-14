@@ -53,14 +53,12 @@ export default function MyAccount() {
           <div className="balmain">
             <span className="lbl">Balance</span>
             <div className={"val " + tone(ggNet)}>{ggNet != null ? fmt(ggNet) : "—"}</div>
-            <span className="sub">{ggInterim != null ? `${fmt(ggInterim)} vs ${fmt(ggAlloc)} allocation` : "no balance yet"}</span>
           </div>
           <BrandIcon src="/clubgg.png" glyph="♣" color="#e2e6ee" size={54} />
         </div>
         <div className="card stat">
           <span className="lbl">Total balance</span>
           <div className={"val " + tone(total)}>{fmt(total)}</div>
-          <span className="sub">Pokerstars + ClubGG</span>
         </div>
       </div>
 
