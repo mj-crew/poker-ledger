@@ -89,7 +89,7 @@ export default function AdminTournaments() {
         <h2 style={{ margin: 0 }}>Active tournaments</h2>
         <span className="right">
           <button className="ghost small" onClick={() => setShowShare((s) => !s)}>
-            {showShare ? "Hide share card" : "📱 Share card"}
+            {showShare ? "Hide share card" : "📤 Share card"}
           </button>
         </span>
       </div>
@@ -315,20 +315,20 @@ function TournamentCard({ t, roster, reload, can }) {
           {t.starts_at ? ` · Starts ${fmtDateTime(t.starts_at)}` : ""}
           {t.late_reg_minutes != null ? ` · Late reg ${t.late_reg_minutes}m` : ""}
         </span>
-        <span className="right row" style={{ gap: 8 }}>
+        <span className="right">
           {phaseOf(t) ? <LifePill phase={phaseOf(t)} /> : <span className="badge gray">draft</span>}
-          {can("nights.manage") && <button className="small red" onClick={cancelTournament}>Cancel</button>}
         </span>
       </div>
 
-      <div className="row" style={{ margin: "12px 0", gap: 18 }}>
+      <div className="row" style={{ margin: "12px 0", gap: 18, alignItems: "center" }}>
         <span className="muted">Total entries <strong>{totalEntries}</strong></span>
         <span className="muted">Pool <strong>{fmt(pool)}</strong></span>
-        {!finalized && canLive && (
-          <span className="right row">
-            {t.status === "draft" && <button className="small ghost" onClick={() => setRego(true)}>Go live</button>}
-            {t.status === "live" && t.rego_open && <button className="small ghost" onClick={() => setRego(false)}>Close rego</button>}
-            {t.status === "live" && !t.rego_open && <button className="small ghost" onClick={() => setRego(true)}>Re-open rego</button>}
+        {!finalized && (
+          <span className="right row" style={{ gap: 8 }}>
+            {canLive && t.status === "draft" && <button className="small ghost" onClick={() => setRego(true)}>Go live</button>}
+            {canLive && t.status === "live" && t.rego_open && <button className="small ghost" onClick={() => setRego(false)}>Close rego</button>}
+            {canLive && t.status === "live" && !t.rego_open && <button className="small ghost" onClick={() => setRego(true)}>Re-open rego</button>}
+            {can("nights.manage") && <button className="small ghost danger" onClick={cancelTournament} title="Delete this tournament">Cancel</button>}
           </span>
         )}
       </div>

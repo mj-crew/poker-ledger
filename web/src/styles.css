@@ -44,6 +44,8 @@ button.ghost { background: transparent; color: var(--ink); border: 1px solid var
 button.ghost:hover { background: var(--surface-2); filter: none; }
 button.pos { background: linear-gradient(180deg, #3fd489, #23a866); color: #04160c; }
 button.red, button.danger { background: linear-gradient(180deg, var(--red-2), var(--red)); color: #fff; }
+button.ghost.danger { background: transparent; color: var(--neg); border-color: color-mix(in srgb, var(--neg) 35%, var(--line-2)); }
+button.ghost.danger:hover { background: color-mix(in srgb, var(--neg) 12%, transparent); }
 button.small { padding: 6px 12px; font-size: 13px; }
 
 input, select {
