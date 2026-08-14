@@ -64,6 +64,7 @@ export default async function settlementRoutes(app) {
       clubgg_balance_cents: z.number().int().min(0),
       clubgg_rake_cents: z.number().int().min(0).default(0),
       clubgg_allocation_cents: z.number().int().min(0).optional(),
+      clubgg_interim_cents: z.number().int().min(0).nullable().optional(), // set only when present
     })),
   });
   app.put("/clubgg/week", { preHandler: [app.authenticate, requireCap("settlement.lock")] }, async (req) => {
@@ -71,8 +72,12 @@ export default async function settlementRoutes(app) {
     const dflt = await allocationCents();
     await tx(async (c) => {
       for (const x of b.balances)
-        await c.query("UPDATE players SET clubgg_balance_cents=$1, clubgg_rake_cents=$2, clubgg_allocation_cents=$3 WHERE id=$4",
-          [x.clubgg_balance_cents, x.clubgg_rake_cents ?? 0, x.clubgg_allocation_cents ?? dflt, x.player_id]);
+        await c.query(
+          `UPDATE players SET clubgg_balance_cents=$1, clubgg_rake_cents=$2, clubgg_allocation_cents=$3,
+                  clubgg_interim_cents = CASE WHEN $5 THEN $6 ELSE clubgg_interim_cents END WHERE id=$4`,
+          [x.clubgg_balance_cents, x.clubgg_rake_cents ?? 0, x.clubgg_allocation_cents ?? dflt, x.player_id,
+           x.clubgg_interim_cents !== undefined, x.clubgg_interim_cents ?? null]
+        );
     });
     return { ok: true };
   });

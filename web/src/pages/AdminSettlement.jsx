@@ -14,6 +14,7 @@ export default function AdminSettlement() {
   const [msg, setMsg] = useState("");
   const [cg, setCg] = useState(null);      // ClubGG week { allocation_cents, players }
   const [cgAllo, setCgAllo] = useState({}); // player_id -> allocation $ (string)
+  const [cgInterim, setCgInterim] = useState({}); // player_id -> interim GG $ (string)
   const [cgBal, setCgBal] = useState({});  // player_id -> finishing $ (string)
   const [cgRake, setCgRake] = useState({}); // player_id -> rake $ (string)
 
@@ -27,6 +28,7 @@ export default function AdminSettlement() {
     const d = await api.get("/clubgg/week");
     setCg(d);
     setCgAllo(Object.fromEntries(d.players.map((p) => [p.player_id, (p.clubgg_allocation_cents / 100).toString()])));
+    setCgInterim(Object.fromEntries(d.players.map((p) => [p.player_id, p.clubgg_interim_cents != null ? (p.clubgg_interim_cents / 100).toString() : ""])));
     setCgBal(Object.fromEntries(d.players.map((p) => [p.player_id, (p.clubgg_balance_cents / 100).toString()])));
     setCgRake(Object.fromEntries(d.players.map((p) => [p.player_id, ((p.clubgg_rake_cents || 0) / 100).toString()])));
   }
@@ -45,7 +47,7 @@ export default function AdminSettlement() {
   async function saveClubgg(rowsToSave) {
     setErr(""); setMsg("");
     try {
-      await api.put("/clubgg/week", { balances: rowsToSave.map((r) => ({ player_id: r.player_id, clubgg_balance_cents: r.bal, clubgg_rake_cents: r.rake, clubgg_allocation_cents: r.allo })) });
+      await api.put("/clubgg/week", { balances: rowsToSave.map((r) => ({ player_id: r.player_id, clubgg_balance_cents: r.bal, clubgg_rake_cents: r.rake, clubgg_allocation_cents: r.allo, clubgg_interim_cents: r.interim })) });
       flash("ClubGG balances saved. They fold into the settlement when you lock.");
       loadClubgg();
     } catch (e) { setErr(e.message); }
@@ -95,8 +97,10 @@ export default function AdminSettlement() {
     const allo = Math.round((parseFloat(cgAllo[p.player_id]) || 0) * 100);
     const bal = Math.round((parseFloat(cgBal[p.player_id]) || 0) * 100);
     const rake = Math.round((parseFloat(cgRake[p.player_id]) || 0) * 100);
+    const iRaw = cgInterim[p.player_id];
+    const interim = iRaw === "" || iRaw == null ? null : Math.round((parseFloat(iRaw) || 0) * 100);
     const net = (bal - allo) + rake;
-    return { ...p, allo, bal, rake, net, combined: (p.ledger_balance_cents || 0) + net };
+    return { ...p, allo, bal, rake, interim, net, combined: (p.ledger_balance_cents || 0) + net };
   });
   const cgNetSum = cgRows.reduce((s, r) => s + r.net, 0);
   const tone = (c) => (c > 0 ? "pos" : c < 0 ? "neg" : "");
@@ -136,7 +140,7 @@ export default function AdminSettlement() {
                 <tr key={r.player_id}>
                   <td>{r.name}{r.clubgg_handle && <div className="muted" style={{ fontSize: 12 }}>{r.clubgg_handle}</div>}</td>
                   <td className="ctr"><input type="number" value={cgAllo[r.player_id] ?? ""} onChange={(e) => setCgAllo((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 90 }} /></td>
-                  <td className="ctr muted">{r.clubgg_interim_cents != null ? fmt(r.clubgg_interim_cents) : "—"}</td>
+                  <td className="ctr"><input type="number" placeholder="—" value={cgInterim[r.player_id] ?? ""} onChange={(e) => setCgInterim((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 100 }} /></td>
                   <td className="ctr"><input type="number" value={cgBal[r.player_id] ?? ""} onChange={(e) => setCgBal((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 100 }} /></td>
                   <td className="ctr"><input type="number" value={cgRake[r.player_id] ?? ""} onChange={(e) => setCgRake((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 90 }} /></td>
                   <td className={"ctr " + tone(r.net)}>{fmt(r.net)}</td>
