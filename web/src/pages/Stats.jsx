@@ -56,7 +56,7 @@ export default function Stats() {
 
   return (
     <>
-      <h1>Stats</h1>
+      <h1>My Stats</h1>
       <div className="card">
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
           <span className="sub" style={{ margin: 0 }}>Your performance across finalized tournaments.</span>
