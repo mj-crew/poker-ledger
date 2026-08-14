@@ -4,10 +4,26 @@ import { useAuth } from "../auth.jsx";
 
 const MEDAL = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
+// Monday (as a YYYY-MM-DD key) of the week a tournament's date falls in.
+function weekKeyOf(playedOn) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(playedOn));
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(playedOn);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + (d.getDay() === 0 ? -6 : 1 - d.getDay()));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function weekLabel(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  const mon = new Date(y, m - 1, d), sun = new Date(y, m - 1, d + 6);
+  const f = (x) => x.toLocaleDateString("en-GB");
+  return `${f(mon)} - ${f(sun)}`;
+}
+
 export default function Results() {
   const { can } = useAuth();
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
+  const [weekIdx, setWeekIdx] = useState(0); // 0 = most recent week
   const canReopen = can("results.enter");
 
   function load() { api.get("/results").then(setRows).catch((e) => setErr(e.message)); }
@@ -23,15 +39,31 @@ export default function Results() {
   if (err && !rows) return <div className="err">{err}</div>;
   if (!rows) return <p className="muted">Loading…</p>;
 
+  // Group finalized tournaments into weeks (Mon–Sun), newest week first.
+  const byWeek = {};
+  for (const t of rows) (byWeek[weekKeyOf(t.played_on)] ||= []).push(t);
+  const weekKeys = Object.keys(byWeek).sort().reverse();
+  const idx = Math.min(weekIdx, Math.max(0, weekKeys.length - 1));
+  const weekRows = weekKeys.length ? byWeek[weekKeys[idx]] : [];
+
   return (
     <>
       <h1>Results</h1>
-      <p className="sub" style={{ marginBottom: 16 }}>Every completed tournament, newest first. Locked once finalized.</p>
       {err && <div className="err" style={{ marginBottom: 12 }}>{err}</div>}
 
-      {rows.length === 0 && <div className="card muted">No completed tournaments yet. Finalize a tournament and it lands here.</div>}
+      {weekKeys.length === 0 ? (
+        <div className="card muted">No completed tournaments yet. Finalize a tournament and it lands here.</div>
+      ) : (
+        <div className="row" style={{ marginBottom: 16, alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <button className="ghost small" onClick={() => setWeekIdx((i) => Math.min(i + 1, weekKeys.length - 1))} disabled={idx >= weekKeys.length - 1}>◀ Older</button>
+          <strong className="gold">Week {weekLabel(weekKeys[idx])}</strong>
+          <span className="muted">· {weekRows.length} tournament{weekRows.length === 1 ? "" : "s"}</span>
+          <button className="ghost small" onClick={() => setWeekIdx((i) => Math.max(i - 1, 0))} disabled={idx <= 0}>Newer ▶</button>
+          {idx > 0 && <button className="ghost small right" onClick={() => setWeekIdx(0)}>Latest week</button>}
+        </div>
+      )}
 
-      {rows.map((t) => {
+      {weekRows.map((t) => {
         const winner = (t.players || []).find((p) => p.finish_position === 1);
         return (
           <div className="card" key={t.id}>
