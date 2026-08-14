@@ -28,8 +28,10 @@ export default function MyAccount() {
   if (!data) return <p className="muted">Loading…</p>;
 
   const bal = data.balance_cents;
-  const gg = data.clubgg_interim_cents;         // may be null (no GG balance yet)
-  const total = bal + (gg || 0);
+  const ggInterim = data.clubgg_interim_cents;  // may be null (no GG balance yet)
+  const ggAlloc = data.clubgg_allocation_cents;
+  const ggNet = ggInterim != null ? ggInterim - (ggAlloc || 0) : null; // vs allocation
+  const total = bal + (ggNet || 0);
 
   async function act(id, path) {
     try { await api.post(`/settlements/${id}/${path}`); await load(); }
@@ -51,8 +53,8 @@ export default function MyAccount() {
           <span className="lbl" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
             <BrandIcon src="/clubgg.png" glyph="♣" color="#e2e6ee" /> ClubGG balance
           </span>
-          <div className="val">{gg != null ? fmt(gg) : "—"}</div>
-          <span className="sub">live chip stack</span>
+          <div className={"val " + tone(ggNet)}>{ggNet != null ? fmt(ggNet) : "—"}</div>
+          <span className="sub">{ggInterim != null ? `${fmt(ggInterim)} vs ${fmt(ggAlloc)} allocation` : "no balance yet"}</span>
         </div>
         <div className="card stat">
           <span className="lbl">Total balance</span>

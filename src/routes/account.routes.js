@@ -7,7 +7,7 @@ export default async function accountRoutes(app) {
     const me = req.user.id;
 
     const balance = (await query("SELECT balance_cents FROM player_balances WHERE player_id=$1", [me])).rows[0]?.balance_cents ?? 0;
-    const clubgg = (await query("SELECT clubgg_interim_cents FROM players WHERE id=$1", [me])).rows[0]?.clubgg_interim_cents ?? null;
+    const cg = (await query("SELECT clubgg_interim_cents, clubgg_allocation_cents FROM players WHERE id=$1", [me])).rows[0] || {};
 
     const ledger = (
       await query(
@@ -43,7 +43,12 @@ export default async function accountRoutes(app) {
       )
     ).rows;
 
-    return { balance_cents: balance, clubgg_interim_cents: clubgg, ledger, i_owe: owe, owed_to_me: owed };
+    return {
+      balance_cents: balance,
+      clubgg_interim_cents: cg.clubgg_interim_cents ?? null,
+      clubgg_allocation_cents: cg.clubgg_allocation_cents ?? null,
+      ledger, i_owe: owe, owed_to_me: owed,
+    };
   });
 
   // Lifetime / period performance stats for the logged-in player, computed from
