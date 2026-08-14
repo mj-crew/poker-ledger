@@ -13,7 +13,7 @@ export function fmtCountdown(ms) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-function stateOf(t, now) {
+export function stateOf(t, now) {
   if (t.phase === "completed" || t.status === "finalized") return { key: "completed", label: "Completed" };
   if (t.status === "reconciled") return { key: "rego_closed", label: "Rego Closed" };
   const start = t.starts_at ? new Date(t.starts_at).getTime() : null;

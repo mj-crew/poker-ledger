@@ -3,13 +3,38 @@ import { api, fmt, fmtDate, fmtDateTime } from "../api";
 import { useAuth } from "../auth.jsx";
 import LifePill, { phaseOf } from "../components/LifePill.jsx";
 import ScreenshotButton from "../components/ScreenshotButton.jsx";
-import TournamentStatus from "../components/TournamentStatus.jsx";
+import TournamentStatus, { stateOf, fmtCountdown } from "../components/TournamentStatus.jsx";
 
 const MEDAL = ["🥇", "🥈", "🥉", "4th", "5th"];
 
-// Condensed, portrait card of what's running — for screenshotting into WhatsApp.
+function statusText(t, now) {
+  const s = stateOf(t, now);
+  return s.cdTo ? `${s.label} · ${s.cdLabel} ${fmtCountdown(s.cdTo - now)}` : s.label;
+}
+
+// Plain-text version of the share card — pastes cleanly into WhatsApp.
+function shareText(rows, now) {
+  const running = rows.filter((t) => t.phase !== "completed");
+  const lines = [`🃏 Flawless Poker 9♦ 4♦ — ${fmtDate(new Date())}`, ""];
+  if (!running.length) return `${lines[0]}\n\nNo tournaments running right now.`;
+  for (const t of running) {
+    lines.push(`${t.game_type || "Tournament"} · ${t.tournament_type}`);
+    lines.push(`💵 Buy-in ${fmt(t.buyin_cents)} · 👥 ${t.entries} · 🏆 Pool ${fmt(t.pool_cents)}`);
+    if (t.places?.length) lines.push(t.places.map((p) => `${MEDAL[p.place - 1] || p.place + "."} ${fmt(p.amount_cents)}`).join(" · "));
+    lines.push(statusText(t, now));
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
+
+// Condensed, portrait card of what's running — screenshot it or Copy for WhatsApp.
 function ShareCard({ rows, now }) {
   const running = rows.filter((t) => t.phase !== "completed");
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try { await navigator.clipboard.writeText(shareText(rows, now)); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    catch { /* clipboard blocked */ }
+  }
   return (
     <div className="sharewrap">
       <div className="sharecard" id="share-card">
@@ -41,6 +66,9 @@ function ShareCard({ rows, now }) {
           </div>
         ))}
       </div>
+      <button className="small" onClick={copy} style={{ marginTop: 12 }}>
+        {copied ? "✓ Copied — paste into WhatsApp" : "📋 Copy for WhatsApp"}
+      </button>
     </div>
   );
 }
