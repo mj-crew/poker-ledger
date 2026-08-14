@@ -85,7 +85,7 @@ export default function AdminTournaments() {
 
       {can("nights.manage") && <CreateTournament reload={load} />}
 
-      <div className="row" style={{ marginTop: 20, flexWrap: "wrap", gap: 8 }}>
+      <div className="row" style={{ marginTop: 20, marginBottom: 14, flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>Active tournaments</h2>
         <span className="right">
           <button className="ghost small" onClick={() => setShowShare((s) => !s)}>
