@@ -27,7 +27,7 @@ export default function MyAccount() {
 
   return (
     <>
-      <h1>My Account</h1>
+      <h1>My Balance</h1>
       <div className="grid c3" style={{ marginTop: 16 }}>
         <div className="card stat">
           <span className="lbl">Current balance</span>

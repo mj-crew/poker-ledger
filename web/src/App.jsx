@@ -29,7 +29,7 @@ function Nav() {
       </div>
       <NavLink to="/" end>Dashboard</NavLink>
       <NavLink to="/results">Results</NavLink>
-      <NavLink to="/account">My Account</NavLink>
+      <NavLink to="/account">My Balance</NavLink>
       <NavLink to="/stats">Stats</NavLink>
       {canAny(...NIGHTS_CAPS) && <NavLink to="/admin/tournaments">Tournaments</NavLink>}
       {canAny(...SETTLE_CAPS) && <NavLink to="/admin/settlement">Settlement</NavLink>}
