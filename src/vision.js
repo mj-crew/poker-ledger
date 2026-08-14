@@ -164,3 +164,39 @@ export function extractResults(image_base64, media_type, players) {
   ].join("\n");
   return extract(image_base64, media_type, prompt, schema);
 }
+
+// 4) Club GG members list with live chip balances (the club-management screen).
+export function extractClubggBalances(image_base64, media_type) {
+  const schema = {
+    type: "object",
+    additionalProperties: false,
+    required: ["members"],
+    properties: {
+      members: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["screen_name", "alias", "gg_id", "chips"],
+          properties: {
+            screen_name: { type: "string" },
+            alias: nullable({ type: "string" }),
+            gg_id: nullable({ type: "string" }),
+            chips: nullable({ type: "number" }),
+          },
+        },
+      },
+    },
+  };
+  const prompt = [
+    "This is a screenshot from the Club GG poker app: a list of club members with their chip balances.",
+    "Each member card shows: a bold SCREEN NAME at the top; an id like '(ID : 4560-1858)'; a chip balance shown next to a red poker-chip icon (may have thousands separators and up to 2 decimals, e.g. '2,496.87', '2,000', '1,518'); and an 'Alias' label followed by the member's real name (which may be blank).",
+    "Extract EACH member as an object:",
+    "- screen_name: the bold screen name exactly.",
+    "- alias: the text shown after 'Alias' (their real name), or null if blank.",
+    "- gg_id: the id digits e.g. '4560-1858', or null.",
+    "- chips: the chip balance as a NUMBER with commas removed, e.g. 2496.87, 2000, 1518.",
+    "Return one object per member, in the order shown.",
+  ].join("\n");
+  return extract(image_base64, media_type, prompt, schema);
+}

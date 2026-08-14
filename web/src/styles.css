@@ -140,6 +140,20 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: va
   border-radius: 14px; padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
 .modal input:disabled { opacity: .6; }
 
+/* ---- ClubGG-style balance cards ---- */
+.gglist { display: flex; flex-direction: column; gap: 10px; }
+.ggcard { display: flex; align-items: center; gap: 12px; background: #20242e; border: 1px solid var(--line); border-radius: 14px; padding: 11px 14px; }
+.ggava { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: #fff; font-size: 18px; flex: 0 0 auto; }
+.gginfo { flex: 1; min-width: 0; }
+.ggname { font-weight: 800; font-size: 15px; color: #f2f4f8; }
+.ggid { font-weight: 500; font-size: 12px; color: var(--muted); }
+.ggalias { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.ggalias span { color: #cdd2db; margin-left: 8px; }
+.ggbal { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 16px; color: #f2f4f8; white-space: nowrap; }
+.ggchip { width: 18px; height: 18px; border-radius: 50%; flex: 0 0 auto;
+  background: repeating-conic-gradient(#e23b3b 0 30deg, #fff 30deg 45deg, #e23b3b 45deg 60deg);
+  box-shadow: inset 0 0 0 3px #e23b3b, inset 0 0 0 4px rgba(255,255,255,.7); }
+
 /* ---- Tables ---- */
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.fixed { table-layout: fixed; }

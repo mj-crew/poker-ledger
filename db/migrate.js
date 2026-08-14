@@ -70,6 +70,10 @@ async function main() {
     "UPDATE players SET name = first_name || ' [' || username || ']' WHERE position('[' in name) = 0",
     // Phone number — Members section only.
     "ALTER TABLE players ADD COLUMN IF NOT EXISTS phone TEXT",
+    // Live "interim" ClubGG chip balance (from balance screenshots) + GG id, so
+    // players can see their current standing mid-week.
+    "ALTER TABLE players ADD COLUMN IF NOT EXISTS clubgg_interim_cents INTEGER",
+    "ALTER TABLE players ADD COLUMN IF NOT EXISTS clubgg_gg_id TEXT",
   ];
   for (const a of alters) await pool.query(a);
 

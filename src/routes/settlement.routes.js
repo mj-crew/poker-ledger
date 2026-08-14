@@ -31,7 +31,7 @@ export default async function settlementRoutes(app) {
   app.get("/clubgg/week", { preHandler: [app.authenticate] }, async () => {
     const alloc = await allocationCents();
     const rows = (await query(
-      `SELECT p.id AS player_id, p.name, p.clubgg_balance_cents, p.clubgg_rake_cents, p.clubgg_allocation_cents,
+      `SELECT p.id AS player_id, p.name, p.clubgg_balance_cents, p.clubgg_rake_cents, p.clubgg_allocation_cents, p.clubgg_interim_cents,
               (SELECT max(handle) FROM handle_aliases h WHERE h.player_id=p.id AND h.platform='clubgg') AS clubgg_handle,
               COALESCE(pb.balance_cents, 0) AS ledger_balance_cents
        FROM players p LEFT JOIN player_balances pb ON pb.player_id=p.id
@@ -43,6 +43,18 @@ export default async function settlementRoutes(app) {
       return { ...r, net_cents: net, combined_cents: (r.ledger_balance_cents || 0) + net };
     });
     return { allocation_cents: alloc, net_sum: players.reduce((s, p) => s + p.net_cents, 0), players };
+  });
+
+  // Live ClubGG chip balances (from balance screenshots) — visible to everyone,
+  // shown in the GG-style card view. Highest balance first.
+  app.get("/clubgg/balances", { preHandler: [app.authenticate] }, async () => {
+    const { rows } = await query(
+      `SELECT p.id AS player_id, p.first_name, p.clubgg_interim_cents, p.clubgg_gg_id,
+              (SELECT max(handle) FROM handle_aliases h WHERE h.player_id=p.id AND h.platform='clubgg') AS screen_name
+       FROM players p WHERE p.active=TRUE
+       ORDER BY p.clubgg_interim_cents DESC NULLS LAST, p.first_name`
+    );
+    return rows.filter((r) => r.screen_name); // only members with a ClubGG name
   });
 
   // Save the entered ClubGG allocation + finishing stacks + rake (settles at lock).

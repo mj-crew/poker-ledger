@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmt, runningWeekLabel, runningWeekBounds, transferStatus } from "../api";
 import { useAuth } from "../auth.jsx";
+import ScreenshotButton from "../components/ScreenshotButton.jsx";
 
 // Bright green ✓ when done, bright red ✗ when still outstanding.
 const Mark = ({ on }) => <span className={on ? "tick" : "cross"}>{on ? "✓" : "✗"}</span>;
@@ -36,6 +37,11 @@ export default function AdminSettlement() {
   }
   function flash(m) { setMsg(m); setErr(""); setTimeout(() => setMsg(""), 5000); }
 
+  function onGgBalances(res) {
+    const u = res.updated?.length || 0, un = res.unmatched?.length || 0;
+    flash(`GG balances read: updated ${u}${un ? `, ${un} not matched (${res.unmatched.map((x) => x.screen_name).join(", ")})` : ""}. Upload more screens to fill the rest.`);
+    loadClubgg();
+  }
   async function saveClubgg(rowsToSave) {
     setErr(""); setMsg("");
     try {
@@ -109,9 +115,12 @@ export default function AdminSettlement() {
 
       {can("settlement.lock") && cg && (
         <div className="card">
-          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          <div className="row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <h2 style={{ margin: 0 }}>ClubGG week</h2>
-            <span className="right sub gold">Default allocation {fmt(cgAlloc)}</span>
+            <span className="right row" style={{ gap: 10, alignItems: "center" }}>
+              <ScreenshotButton kind="clubgg_balances" label="📷 Upload GG balances" onResult={onGgBalances} />
+              <span className="sub gold">Default allocation {fmt(cgAlloc)}</span>
+            </span>
           </div>
           <p className="sub" style={{ margin: "6px 0 12px" }}>
             Enter each player's allocation (defaults to {fmt(cgAlloc)}, adjust if it differed), their Sunday finishing
@@ -119,7 +128,7 @@ export default function AdminSettlement() {
           </p>
           <table>
             <thead><tr>
-              <th>Player</th><th className="ctr">Allocation $</th><th className="ctr">Finishing $</th><th className="ctr">Rake $</th>
+              <th>Player</th><th className="ctr">Allocation $</th><th className="ctr">Interim GG</th><th className="ctr">Finishing $</th><th className="ctr">Rake $</th>
               <th className="ctr">ClubGG net</th><th className="ctr">Tournaments</th><th className="ctr">Combined</th>
             </tr></thead>
             <tbody>
@@ -127,6 +136,7 @@ export default function AdminSettlement() {
                 <tr key={r.player_id}>
                   <td>{r.name}{r.clubgg_handle && <div className="muted" style={{ fontSize: 12 }}>{r.clubgg_handle}</div>}</td>
                   <td className="ctr"><input type="number" value={cgAllo[r.player_id] ?? ""} onChange={(e) => setCgAllo((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 90 }} /></td>
+                  <td className="ctr muted">{r.clubgg_interim_cents != null ? fmt(r.clubgg_interim_cents) : "—"}</td>
                   <td className="ctr"><input type="number" value={cgBal[r.player_id] ?? ""} onChange={(e) => setCgBal((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 100 }} /></td>
                   <td className="ctr"><input type="number" value={cgRake[r.player_id] ?? ""} onChange={(e) => setCgRake((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 90 }} /></td>
                   <td className={"ctr " + tone(r.net)}>{fmt(r.net)}</td>

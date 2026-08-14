@@ -7,6 +7,37 @@ const PLACE = ["1st", "2nd", "3rd", "4th", "5th"];
 // Bright green ✓ when done, bright red ✗ when still outstanding.
 const Mark = ({ on }) => <span className={on ? "tick" : "cross"}>{on ? "✓" : "✗"}</span>;
 
+const AVA = ["#6b4fbb", "#2f9e63", "#b9862a", "#2b62b6", "#b93a3a", "#3aa0b9", "#8a4fbb", "#347f8a"];
+const avaColor = (s) => { let h = 0; for (const c of s || "?") h = (h * 31 + c.charCodeAt(0)) >>> 0; return AVA[h % AVA.length]; };
+const fmtChips = (c) => (c == null ? "—" : (c / 100).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+
+// ClubGG live chip stacks, styled like the GG members list. Visible to everyone.
+function GgBalances() {
+  const [rows, setRows] = useState(null);
+  useEffect(() => { api.get("/clubgg/balances").then(setRows).catch(() => setRows([])); }, []);
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div className="card">
+      <div className="row" style={{ marginBottom: 12 }}>
+        <h2 style={{ margin: 0 }}>ClubGG balances</h2>
+        <span className="right sub muted">live chip stacks</span>
+      </div>
+      <div className="gglist">
+        {rows.map((p) => (
+          <div className="ggcard" key={p.player_id}>
+            <span className="ggava" style={{ background: avaColor(p.screen_name) }}>{(p.screen_name || "?").slice(0, 1).toUpperCase()}</span>
+            <div className="gginfo">
+              <div className="ggname">{p.screen_name}{p.clubgg_gg_id && <span className="ggid"> (ID : {p.clubgg_gg_id})</span>}</div>
+              <div className="ggalias">Alias{p.first_name ? <span>{p.first_name}</span> : ""}</div>
+            </div>
+            <div className="ggbal"><span className="ggchip" />{fmtChips(p.clubgg_interim_cents)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function paysLabel(t) {
   if (!t.places?.length) return <span className="muted">—</span>;
   return t.places.map((p, i) => (
@@ -112,6 +143,8 @@ export default function Dashboard() {
         </table>
         <p className="sub" style={{ marginTop: 10 }}>Positive = owed to you · Negative = you owe. Settled weekly.</p>
       </div>
+
+      <GgBalances />
 
       {period?.transfers?.length > 0 && (
         <div className="card">
