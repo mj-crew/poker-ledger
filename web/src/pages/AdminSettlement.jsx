@@ -148,8 +148,8 @@ export default function AdminSettlement() {
           </p>
           <table>
             <thead><tr>
-              <th>Player</th><th className="ctr">Allocation $</th><th className="ctr">Interim GG</th><th className="ctr">Finishing $</th><th className="ctr">Rake $</th><th className="ctr">Expenses</th>
-              <th className="ctr">ClubGG net</th><th className="ctr">Tournaments</th><th className="ctr">Combined</th>
+              <th>Player</th><th className="ctr">ClubGG Weekly Allocation</th><th className="ctr">Midweek Club GG Cash Position</th><th className="ctr">ClubGG End of the week balance</th><th className="ctr">Full rake contribution $</th><th className="ctr">Club GG Prorata weekly expenses $</th>
+              <th className="ctr">ClubGG Net Rake Back $</th><th className="ctr">Pokerstars Tournaments $</th><th className="ctr">Total</th>
             </tr></thead>
             <tbody>
               {cgRows.map((r) => (
