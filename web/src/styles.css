@@ -204,17 +204,6 @@ tr:last-child td { border-bottom: none; }
 table.mini { margin-top:6px; }
 table.mini th, table.mini td { padding:5px 8px; font-size:12px; }
 
-/* Per-game breakdown bubbles under the stats sections (My Stats). */
-.gamepills { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
-.gamepills .lead { font-size:12px; color:var(--muted); font-weight:600; }
-.gamepill { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:700;
-  padding:5px 12px; border-radius:999px; border:1px solid var(--line-2); background:var(--surface-2); white-space:nowrap; }
-.gamepill .g { color:var(--ink); }
-.gamepill .c { color:var(--muted); font-weight:600; }
-.gamepill .v { font-weight:800; }
-.gamepill.pos { border-color: color-mix(in srgb, var(--pos) 45%, var(--line-2)); background: color-mix(in srgb, var(--pos) 10%, var(--surface-2)); }
-.gamepill.neg { border-color: color-mix(in srgb, var(--neg) 45%, var(--line-2)); background: color-mix(in srgb, var(--neg) 10%, var(--surface-2)); }
-
 .lifepill { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:4px 11px; border-radius:999px; letter-spacing:.2px; }
 .lifepill .d { width:7px; height:7px; border-radius:50%; }
 .lifepill.rego_open { background:rgba(53,192,122,.15); color:#58d999; }

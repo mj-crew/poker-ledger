@@ -53,20 +53,20 @@ function TournamentTiles({ s }) {
   );
 }
 
-// Per-game breakdown bubbles under the ClubGG sections (you play mixed games).
+// Per-game breakdown under the ClubGG sections (you play mixed games) — same
+// tile treatment as the stat cards above it.
 function ByGame({ rows, unit }) {
   if (!rows?.length) return null;
   return (
-    <div className="gamepills">
-      <span className="lead">By game</span>
-      {rows.map((g, i) => (
-        <span key={g.game_type || i} className={"gamepill " + tone(g.net_cents)}>
-          <span className="g">{g.game_type || "?"}</span>
-          <span className="c">{g[unit]}</span>
-          <span className={"v " + tone(g.net_cents)}>{fmt(g.net_cents)}</span>
-        </span>
-      ))}
-    </div>
+    <>
+      <p className="sub" style={{ margin: "16px 0 8px" }}>By game</p>
+      <div className="tiles">
+        {rows.map((g, i) => (
+          <Tile key={g.game_type || i} label={g.game_type || "?"} value={fmt(g.net_cents)}
+            tone={tone(g.net_cents)} sub={g[unit]} />
+        ))}
+      </div>
+    </>
   );
 }
 
