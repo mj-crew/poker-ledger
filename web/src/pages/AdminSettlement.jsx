@@ -49,6 +49,34 @@ export default function AdminSettlement() {
     flash(`GG balances read: updated ${u}${un ? `, ${un} not matched (${res.unmatched.map((x) => x.screen_name).join(", ")})` : ""}. Upload more screens to fill the rest.`);
     loadClubgg();
   }
+
+  // Weekly ClubGG club export (.xlsx) → tournament + cash stats, and (for the
+  // current week) pre-filled finishing stacks + rake below.
+  const [importing, setImporting] = useState(false);
+  async function importReport(file) {
+    setImporting(true); setErr("");
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(",")[1]); // strip data: prefix
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      const res = await api.post("/clubgg/import", { data });
+      const bits = [
+        `week ${res.period.week_start} → ${res.period.week_end}`,
+        `${res.tournaments} tournaments (${res.results} results)`,
+        `${res.cash_sessions} cash sessions`,
+        res.prefill_skipped ? "older week — stats only, settlement table untouched"
+                            : `finishing stacks + rake pre-filled for ${res.prefilled} players`,
+      ];
+      if (res.unmatched?.length) bits.push(`⚠ not matched: ${res.unmatched.join(", ")} — set their ClubGG name in Members`);
+      if (res.warnings?.length) bits.push(`⚠ ${res.warnings.join(" · ")}`);
+      flash(`Report imported: ${bits.join(" · ")}`);
+      loadClubgg();
+    } catch (e) { setErr(e.message || "Import failed"); }
+    finally { setImporting(false); }
+  }
   async function saveClubgg(rowsToSave) {
     setErr(""); setMsg("");
     try {
@@ -138,6 +166,11 @@ export default function AdminSettlement() {
           <div className="row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <h2 style={{ margin: 0 }}>ClubGG week</h2>
             <span className="right row" style={{ gap: 10, alignItems: "center" }}>
+              <label className="ghost small" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", border: "1px solid var(--line)", borderRadius: 8, padding: "5px 10px" }}>
+                {importing ? "Importing…" : "📄 Import GG weekly report (.xlsx)"}
+                <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importReport(f); }} />
+              </label>
               <ScreenshotButton kind="clubgg_balances" label="📷 Upload GG balances" onResult={onGgBalances} />
               <span className="sub gold">Default allocation {fmt(cgAlloc)}</span>
             </span>

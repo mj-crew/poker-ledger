@@ -99,6 +99,54 @@ async function main() {
        target_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
      )`,
+    // ClubGG weekly-export import (stats only, not the money ledger). One row
+    // per tournament; results hold BOTH what ClubGG paid (gg_prize) and the
+    // house redistribution (house_prize) the club actually applies.
+    `CREATE TABLE IF NOT EXISTS gg_tournaments (
+       id BIGSERIAL PRIMARY KEY,
+       title TEXT NOT NULL,
+       game_type TEXT,
+       buyin_cents INTEGER NOT NULL DEFAULT 0,
+       fee_cents INTEGER NOT NULL DEFAULT 0,
+       entries INTEGER NOT NULL DEFAULT 0,
+       pool_cents INTEGER NOT NULL DEFAULT 0,
+       played_on DATE NOT NULL,
+       started_at TIMESTAMPTZ,
+       week_start DATE NOT NULL,
+       week_end DATE NOT NULL
+     )`,
+    `CREATE TABLE IF NOT EXISTS gg_tournament_results (
+       id BIGSERIAL PRIMARY KEY,
+       tournament_id BIGINT NOT NULL REFERENCES gg_tournaments(id) ON DELETE CASCADE,
+       player_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
+       gg_id TEXT NOT NULL,
+       nickname TEXT,
+       finish_position INTEGER NOT NULL,
+       reentries INTEGER NOT NULL DEFAULT 0,
+       invested_cents INTEGER NOT NULL DEFAULT 0,
+       gg_prize_cents INTEGER NOT NULL DEFAULT 0,
+       house_prize_cents INTEGER NOT NULL DEFAULT 0,
+       net_cents INTEGER NOT NULL DEFAULT 0,
+       hands INTEGER NOT NULL DEFAULT 0
+     )`,
+    // One row per player per cash table session (multi-day blocks aggregated).
+    `CREATE TABLE IF NOT EXISTS gg_cash_sessions (
+       id BIGSERIAL PRIMARY KEY,
+       player_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
+       gg_id TEXT NOT NULL,
+       nickname TEXT,
+       table_name TEXT,
+       game_type TEXT,
+       bb_cents INTEGER NOT NULL DEFAULT 100,
+       played_on DATE NOT NULL,
+       started_at TIMESTAMPTZ,
+       hands INTEGER NOT NULL DEFAULT 0,
+       buyin_cents INTEGER NOT NULL DEFAULT 0,
+       pnl_cents INTEGER NOT NULL DEFAULT 0,
+       rake_cents INTEGER NOT NULL DEFAULT 0,
+       week_start DATE NOT NULL,
+       week_end DATE NOT NULL
+     )`,
   ];
   for (const a of alters) await pool.query(a);
 

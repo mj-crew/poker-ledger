@@ -3,6 +3,8 @@ import { query, tx } from "../db.js";
 import { requireCap } from "../auth.js";
 import { settle } from "../lib/settlement.js";
 import { allocateProrata } from "../lib/prorata.js";
+import { parseClubggExport } from "../lib/clubgg-import.js";
+import { computePayouts } from "../lib/payouts.js";
 
 async function transfersFor(periodId) {
   return (
@@ -92,6 +94,124 @@ export default async function settlementRoutes(app) {
         );
     });
     return { ok: true };
+  });
+
+  // Import the weekly ClubGG club export (.xlsx). Stats-only data (gg_* tables,
+  // replaced per week so re-uploads are safe) — the money ledger is untouched.
+  // Tournament prizes are RE-PAID by the house payout structure (Settings), by
+  // actual finishing position, because the club redistributes chips right after
+  // each tournament regardless of what ClubGG's own payout table says.
+  // If the export is for the week just gone, finishing stacks + rake are also
+  // pre-filled into the settlement columns (admin can still edit before lock).
+  const importBody = z.object({ data: z.string().min(1) }); // base64 xlsx
+  app.post("/clubgg/import", { preHandler: [app.authenticate, requireCap("settlement.lock")] }, async (req, reply) => {
+    const { data } = importBody.parse(req.body);
+    let parsed;
+    try {
+      parsed = parseClubggExport(Buffer.from(data, "base64"));
+    } catch (e) {
+      return reply.code(400).send({ error: e.message || "Could not parse the file" });
+    }
+    const { period, tournaments, cash_sessions, balances } = parsed;
+
+    const structure = (await query(
+      "SELECT payload FROM payout_structures WHERE is_default=TRUE ORDER BY id LIMIT 1"
+    )).rows[0]?.payload;
+    if (!structure) return reply.code(500).send({ error: "No default payout structure configured" });
+
+    // Match export rows to players: by stored GG id first, then by ClubGG
+    // nickname (and remember the id for next time). Unmatched rows are kept
+    // (player_id NULL) and reported so the admin can fix the member profile.
+    const ps = (await query(
+      `SELECT p.id, p.name, p.clubgg_gg_id,
+              (SELECT max(h.handle) FROM handle_aliases h WHERE h.player_id=p.id AND h.platform='clubgg') AS clubgg_handle
+       FROM players p`
+    )).rows;
+    const byGgId = new Map(ps.filter((p) => p.clubgg_gg_id).map((p) => [p.clubgg_gg_id, p]));
+    const byNick = new Map(ps.filter((p) => p.clubgg_handle).map((p) => [p.clubgg_handle.toLowerCase(), p]));
+    const learned = new Map(); // player_id -> gg_id to remember
+    const unmatched = new Set();
+    const matchId = (gg_id, nickname) => {
+      const p = byGgId.get(gg_id) || byNick.get(String(nickname || "").toLowerCase());
+      if (!p) { unmatched.add(`${nickname} (${gg_id})`); return null; }
+      if (!p.clubgg_gg_id && !learned.has(p.id)) learned.set(p.id, gg_id);
+      return p.id;
+    };
+
+    const warnings = [];
+    let resultRows = 0;
+    await tx(async (c) => {
+      await c.query("DELETE FROM gg_tournaments WHERE week_start=$1", [period.week_start]);
+      await c.query("DELETE FROM gg_cash_sessions WHERE week_start=$1", [period.week_start]);
+
+      for (const t of tournaments) {
+        const { amounts, warnings: w } = computePayouts(structure, t.entries, t.pool_cents);
+        w.forEach((x) => warnings.push(`${t.title}: ${x}`));
+        const tr = await c.query(
+          `INSERT INTO gg_tournaments (title, game_type, buyin_cents, fee_cents, entries, pool_cents, played_on, started_at, week_start, week_end)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+          [t.title, t.game_type, t.buyin_cents, t.fee_cents, t.entries, t.pool_cents, t.played_on,
+           t.started_at, period.week_start, period.week_end]
+        );
+        for (const p of t.players) {
+          const house = amounts[p.finish_position - 1] ?? 0;
+          await c.query(
+            `INSERT INTO gg_tournament_results (tournament_id, player_id, gg_id, nickname, finish_position,
+               reentries, invested_cents, gg_prize_cents, house_prize_cents, net_cents, hands)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            [tr.rows[0].id, matchId(p.gg_id, p.nickname), p.gg_id, p.nickname, p.finish_position,
+             p.reentries, p.invested_cents, p.gg_prize_cents, house, house - p.invested_cents, p.hands]
+          );
+          resultRows++;
+        }
+      }
+
+      for (const s of cash_sessions) {
+        await c.query(
+          `INSERT INTO gg_cash_sessions (player_id, gg_id, nickname, table_name, game_type, bb_cents,
+             played_on, started_at, hands, buyin_cents, pnl_cents, rake_cents, week_start, week_end)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+          [matchId(s.gg_id, s.nickname), s.gg_id, s.nickname, s.table_name, s.game_type, s.bb_cents,
+           s.played_on, s.started_at, s.hands, s.buyin_cents, s.pnl_cents, s.rake_cents,
+           period.week_start, period.week_end]
+        );
+      }
+
+      for (const [pid, ggId] of learned) await c.query("UPDATE players SET clubgg_gg_id=$1 WHERE id=$2", [ggId, pid]);
+    });
+
+    // Settlement pre-fill — only when this is the current/just-finished week,
+    // so importing an old export for stats can't clobber live settlement inputs.
+    const recent = (Date.now() - new Date(period.week_end + "T00:00:00").getTime()) / 86400000 <= 7;
+    let prefilled = 0;
+    if (recent) {
+      const rakeByPlayer = new Map();
+      for (const s of cash_sessions) {
+        const pid = byGgId.get(s.gg_id)?.id ?? [...learned.entries()].find(([, g]) => g === s.gg_id)?.[0]
+          ?? byNick.get(String(s.nickname || "").toLowerCase())?.id;
+        if (pid) rakeByPlayer.set(pid, (rakeByPlayer.get(pid) || 0) + s.rake_cents);
+      }
+      await tx(async (c) => {
+        for (const b of balances) {
+          const pid = byGgId.get(b.gg_id)?.id ?? byNick.get(String(b.nickname || "").toLowerCase())?.id;
+          if (!pid) continue;
+          await c.query("UPDATE players SET clubgg_balance_cents=$1, clubgg_rake_cents=$2 WHERE id=$3",
+            [b.chips_cents, rakeByPlayer.get(pid) || 0, pid]);
+          prefilled++;
+        }
+      });
+    }
+
+    return {
+      period,
+      tournaments: tournaments.length,
+      results: resultRows,
+      cash_sessions: cash_sessions.length,
+      unmatched: [...unmatched],
+      warnings,
+      prefilled: recent ? prefilled : 0,
+      prefill_skipped: !recent,
+    };
   });
 
   app.get("/settlement/periods/:id", { preHandler: [app.authenticate] }, async (req, reply) => {

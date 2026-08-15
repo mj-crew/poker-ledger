@@ -107,6 +107,66 @@ export default async function accountRoutes(app) {
       params
     )).rows[0];
 
-    return row;
+    // ---- ClubGG tournaments (imported weekly; prizes already re-paid by the
+    // house structure, so the same tile set as PokerStars applies).
+    const ggCond = ["r.player_id = $1"];
+    const ggParams = [me];
+    if (isDate(from)) { ggParams.push(from); ggCond.push(`t.played_on >= $${ggParams.length}`); }
+    if (isDate(to)) { ggParams.push(to); ggCond.push(`t.played_on <= $${ggParams.length}`); }
+    const ggWhere = ggCond.join(" AND ");
+
+    const gg_mtt = (await query(
+      `SELECT
+         COUNT(*)::int                                              AS tournaments,
+         COALESCE(SUM(1 + r.reentries), 0)::int                     AS entries,
+         COALESCE(SUM(r.invested_cents), 0)::int                    AS invested_cents,
+         COALESCE(SUM(r.house_prize_cents), 0)::int                 AS won_cents,
+         COALESCE(SUM(r.net_cents), 0)::int                         AS net_cents,
+         COUNT(*) FILTER (WHERE r.house_prize_cents > 0)::int       AS cashes,
+         COALESCE(MAX(r.house_prize_cents), 0)::int                 AS biggest_cash_cents,
+         COALESCE(MAX(r.net_cents), 0)::int                         AS best_net_cents,
+         MIN(t.played_on) AS first_played, MAX(t.played_on) AS last_played
+       FROM gg_tournament_results r JOIN gg_tournaments t ON t.id = r.tournament_id
+       WHERE ${ggWhere}`,
+      ggParams
+    )).rows[0];
+    gg_mtt.by_game = (await query(
+      `SELECT t.game_type, COUNT(*)::int AS tournaments, COALESCE(SUM(r.net_cents),0)::int AS net_cents
+       FROM gg_tournament_results r JOIN gg_tournaments t ON t.id = r.tournament_id
+       WHERE ${ggWhere} GROUP BY t.game_type ORDER BY tournaments DESC`,
+      ggParams
+    )).rows;
+
+    // ---- ClubGG cash games. bb/100 uses per-session blind size so mixed
+    // stakes stay honest: sum(pnl/bb) ÷ hands × 100.
+    const cCond = ["s.player_id = $1"];
+    const cParams = [me];
+    if (isDate(from)) { cParams.push(from); cCond.push(`s.played_on >= $${cParams.length}`); }
+    if (isDate(to)) { cParams.push(to); cCond.push(`s.played_on <= $${cParams.length}`); }
+    const cWhere = cCond.join(" AND ");
+
+    const gg_cash = (await query(
+      `SELECT
+         COUNT(*)::int                              AS sessions,
+         COALESCE(SUM(s.hands), 0)::int             AS hands,
+         COALESCE(SUM(s.pnl_cents), 0)::int         AS net_cents,
+         COALESCE(SUM(s.rake_cents), 0)::int        AS rake_cents,
+         COALESCE(SUM(s.buyin_cents), 0)::int       AS buyin_cents,
+         COALESCE(MAX(s.pnl_cents), 0)::int         AS best_cents,
+         COALESCE(MIN(s.pnl_cents), 0)::int         AS worst_cents,
+         COALESCE(SUM(s.pnl_cents::float / NULLIF(s.bb_cents, 0)), 0) AS bb_won,
+         MIN(s.played_on) AS first_played, MAX(s.played_on) AS last_played
+       FROM gg_cash_sessions s WHERE ${cWhere}`,
+      cParams
+    )).rows[0];
+    gg_cash.by_game = (await query(
+      `SELECT s.game_type, COUNT(*)::int AS sessions, COALESCE(SUM(s.hands),0)::int AS hands,
+              COALESCE(SUM(s.pnl_cents),0)::int AS net_cents
+       FROM gg_cash_sessions s WHERE ${cWhere} GROUP BY s.game_type ORDER BY hands DESC`,
+      cParams
+    )).rows;
+
+    // Legacy top-level fields kept (PokerStars block) + the two new blocks.
+    return { ...row, gg_mtt, gg_cash };
   });
 }
