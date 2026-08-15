@@ -60,7 +60,7 @@ export default function Expenses() {
   return (
     <>
       <h1>Expenses</h1>
-      <p className="sub" style={{ marginBottom: 16 }}>Club spending, deducted from the rake. Everyone can see where the money goes.</p>
+      <p className="sub" style={{ marginBottom: 16 }}>Club spending, covered from the rake. Whoever claims an expense is reimbursed at settlement; the cost is shared across players by their rake contribution.</p>
 
       {canManage && (
         <div className="card">
@@ -68,9 +68,9 @@ export default function Expenses() {
           <form className="row" onSubmit={add} style={{ flexWrap: "wrap" }}>
             <div style={{ flex: 2, minWidth: 180 }}><label>Description</label><input value={desc} onChange={(e) => setDesc(e.target.value)} required /></div>
             <div style={{ width: 110 }}><label>Amount $</label><input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required /></div>
-            <div style={{ width: 170 }}><label>Allocated to</label>
-              <select value={playerId} onChange={(e) => setPlayerId(e.target.value)}>
-                <option value="">— (whole club)</option>
+            <div style={{ width: 170 }}><label>Claimed by</label>
+              <select value={playerId} onChange={(e) => setPlayerId(e.target.value)} required>
+                <option value="">— select —</option>
                 {roster.map((p) => <option key={p.id} value={p.id}>{p.first_name}</option>)}
               </select>
             </div>
@@ -94,13 +94,13 @@ export default function Expenses() {
               <span className="right gold" style={{ fontWeight: 700 }}>{fmt(total)}</span>
             </div>
             <table>
-              <thead><tr><th>Date</th><th>Description</th><th>Allocated to</th><th className="num">Amount</th><th className="ctr">Receipt</th>{canManage && <th></th>}</tr></thead>
+              <thead><tr><th>Date</th><th>Description</th><th>Claimed by</th><th className="num">Amount</th><th className="ctr">Receipt</th>{canManage && <th></th>}</tr></thead>
               <tbody>
                 {items.map((x) => (
                   <tr key={x.id}>
                     <td className="muted">{fmtDate(x.played_on)}</td>
                     <td>{x.description}</td>
-                    <td className="muted">{x.player_first || "Club"}</td>
+                    <td className="muted">{x.player_first || "—"}</td>
                     <td className="num">{fmt(x.amount_cents)}</td>
                     <td className="ctr">{x.has_receipt ? <button className="linkbtn" onClick={() => viewReceipt(x.id)}>View</button> : <span className="muted">—</span>}</td>
                     {canManage && <td className="num"><button className="ghost small danger" onClick={() => del(x.id)}>Delete</button></td>}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, fmt, runningWeekLabel, runningWeekBounds, transferStatus } from "../api";
+import { api, fmt, runningWeekLabel, runningWeekBounds, allocateProrata, transferStatus } from "../api";
 import { useAuth } from "../auth.jsx";
 import ScreenshotButton from "../components/ScreenshotButton.jsx";
 
@@ -17,6 +17,7 @@ export default function AdminSettlement() {
   const [cgInterim, setCgInterim] = useState({}); // player_id -> interim GG $ (string)
   const [cgBal, setCgBal] = useState({});  // player_id -> finishing $ (string)
   const [cgRake, setCgRake] = useState({}); // player_id -> rake $ (string)
+  const [allExpenses, setAllExpenses] = useState([]);
 
   async function load(selectId) {
     const ps = await api.get("/settlement/periods");
@@ -32,7 +33,11 @@ export default function AdminSettlement() {
     setCgBal(Object.fromEntries(d.players.map((p) => [p.player_id, (p.clubgg_balance_cents / 100).toString()])));
     setCgRake(Object.fromEntries(d.players.map((p) => [p.player_id, ((p.clubgg_rake_cents || 0) / 100).toString()])));
   }
-  useEffect(() => { load(); loadClubgg().catch((e) => setErr(e.message)); }, []);
+  useEffect(() => {
+    load();
+    loadClubgg().catch((e) => setErr(e.message));
+    api.get("/expenses").then(setAllExpenses).catch(() => {});
+  }, []);
 
   async function openPeriod(id) {
     setSel(await api.get(`/settlement/periods/${id}`));
@@ -57,7 +62,9 @@ export default function AdminSettlement() {
     if (!confirm(`Are you sure you want to lock this period (${activeWeek})?\n\nThis freezes everyone's balances into who-pays-whom for the week. Players can then pay & confirm.`)) return;
     setErr(""); setMsg("");
     try {
-      const p = await api.post("/settlement/periods/lock", { label: runningWeekLabel(periods[0]) });
+      const { start, end } = runningWeekBounds(periods[0]);
+      const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const p = await api.post("/settlement/periods/lock", { label: runningWeekLabel(periods[0]), starts_on: iso(start), ends_on: iso(end) });
       await load(p.id);
       flash("Week locked — transfers generated. Players can now pay & confirm.");
     } catch (e) { setErr(e.message); }
@@ -91,7 +98,15 @@ export default function AdminSettlement() {
   const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
   const canLockNow = todayMid.getTime() >= weekEnd.getTime();
 
-  // ClubGG live rows from the current inputs: net = (stack − allocation) + rake.
+  // Claimed expenses in the active week → covered prorata by rake, reimbursed to claimers.
+  const weekStart = runningWeekBounds(periods[0]).start;
+  const inWeek = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d)); const x = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(d); return x >= weekStart && x <= weekEnd; };
+  const claimedMap = {}; let totalClaimed = 0;
+  for (const e of allExpenses) if (e.player_id && inWeek(e.played_on)) { claimedMap[e.player_id] = (claimedMap[e.player_id] || 0) + e.amount_cents; totalClaimed += e.amount_cents; }
+  const rakeCentsOf = (pid) => Math.round((parseFloat(cgRake[pid]) || 0) * 100);
+  const shares = allocateProrata((cg?.players || []).map((p) => ({ id: p.player_id, weight: rakeCentsOf(p.player_id) })), totalClaimed);
+
+  // ClubGG rows: net = (finishing − allocation) + rake − prorata expense share + reimbursements.
   const cgAlloc = cg?.allocation_cents ?? 200000; // default, used as the header hint
   const cgRows = (cg?.players || []).map((p) => {
     const allo = Math.round((parseFloat(cgAllo[p.player_id]) || 0) * 100);
@@ -99,8 +114,9 @@ export default function AdminSettlement() {
     const rake = Math.round((parseFloat(cgRake[p.player_id]) || 0) * 100);
     const iRaw = cgInterim[p.player_id];
     const interim = iRaw === "" || iRaw == null ? null : Math.round((parseFloat(iRaw) || 0) * 100);
-    const net = (bal - allo) + rake;
-    return { ...p, allo, bal, rake, interim, net, combined: (p.ledger_balance_cents || 0) + net };
+    const expenseEffect = (claimedMap[p.player_id] || 0) - (shares[p.player_id] || 0); // reimbursed − covered
+    const net = (bal - allo) + rake + expenseEffect;
+    return { ...p, allo, bal, rake, interim, expenseEffect, net, combined: (p.ledger_balance_cents || 0) + net };
   });
   const cgNetSum = cgRows.reduce((s, r) => s + r.net, 0);
   const tone = (c) => (c > 0 ? "pos" : c < 0 ? "neg" : "");
@@ -128,11 +144,11 @@ export default function AdminSettlement() {
           </div>
           <p className="sub" style={{ margin: "6px 0 12px" }}>
             Enter each player's allocation (defaults to {fmt(cgAlloc)}, adjust if it differed), their Sunday finishing
-            stack, and the cash-game rake they paid (rebated back). Net = (stack − allocation) + rake. Folds into the settlement when you lock.
+            stack, and the cash-game rake they paid (rebated back). Net = (finishing − allocation) + rake − prorata expense share + expenses you claimed. Folds into the settlement when you lock.
           </p>
           <table>
             <thead><tr>
-              <th>Player</th><th className="ctr">Allocation $</th><th className="ctr">Interim GG</th><th className="ctr">Finishing $</th><th className="ctr">Rake $</th>
+              <th>Player</th><th className="ctr">Allocation $</th><th className="ctr">Interim GG</th><th className="ctr">Finishing $</th><th className="ctr">Rake $</th><th className="ctr">Expenses</th>
               <th className="ctr">ClubGG net</th><th className="ctr">Tournaments</th><th className="ctr">Combined</th>
             </tr></thead>
             <tbody>
@@ -143,6 +159,7 @@ export default function AdminSettlement() {
                   <td className="ctr"><input type="number" placeholder="—" value={cgInterim[r.player_id] ?? ""} onChange={(e) => setCgInterim((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 100 }} /></td>
                   <td className="ctr"><input type="number" value={cgBal[r.player_id] ?? ""} onChange={(e) => setCgBal((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 100 }} /></td>
                   <td className="ctr"><input type="number" value={cgRake[r.player_id] ?? ""} onChange={(e) => setCgRake((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 90 }} /></td>
+                  <td className={"ctr " + tone(r.expenseEffect)}>{r.expenseEffect ? fmt(r.expenseEffect) : "—"}</td>
                   <td className={"ctr " + tone(r.net)}>{fmt(r.net)}</td>
                   <td className={"ctr " + tone(r.ledger_balance_cents || 0)}>{fmt(r.ledger_balance_cents || 0)}</td>
                   <td className={"ctr " + tone(r.combined)}>{fmt(r.combined)}</td>

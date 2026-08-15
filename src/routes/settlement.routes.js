@@ -2,6 +2,7 @@ import { z } from "zod";
 import { query, tx } from "../db.js";
 import { requireCap } from "../auth.js";
 import { settle } from "../lib/settlement.js";
+import { allocateProrata } from "../lib/prorata.js";
 
 async function transfersFor(periodId) {
   return (
@@ -117,11 +118,24 @@ export default async function settlementRoutes(app) {
     const combined = new Map();
     for (const r of (await query("SELECT player_id, balance_cents FROM player_balances")).rows)
       combined.set(r.player_id, (combined.get(r.player_id) || 0) + r.balance_cents);
+    // Claimed expenses for this week are covered prorata by each player's rake
+    // share and reimbursed to whoever claimed them (stays zero-sum).
+    const players = (await query("SELECT id AS player_id, clubgg_balance_cents, clubgg_rake_cents, clubgg_allocation_cents FROM players WHERE active=TRUE")).rows;
+    const claimed = {};
+    let totalClaimed = 0;
+    if (b.starts_on && b.ends_on) {
+      for (const e of (await query(
+        "SELECT player_id, amount_cents FROM expenses WHERE player_id IS NOT NULL AND played_on BETWEEN $1 AND $2",
+        [b.starts_on, b.ends_on]
+      )).rows) { claimed[e.player_id] = (claimed[e.player_id] || 0) + e.amount_cents; totalClaimed += e.amount_cents; }
+    }
+    const shares = allocateProrata(players.map((p) => ({ id: p.player_id, weight: p.clubgg_rake_cents })), totalClaimed);
     const clubggNet = new Map();
-    for (const r of (await query("SELECT id AS player_id, clubgg_balance_cents, clubgg_rake_cents, clubgg_allocation_cents FROM players WHERE active=TRUE")).rows) {
-      const net = (r.clubgg_balance_cents - r.clubgg_allocation_cents) + r.clubgg_rake_cents;
-      clubggNet.set(r.player_id, net);
-      combined.set(r.player_id, (combined.get(r.player_id) || 0) + net);
+    for (const p of players) {
+      const net = (p.clubgg_balance_cents - p.clubgg_allocation_cents) + p.clubgg_rake_cents
+        - (shares[p.player_id] || 0) + (claimed[p.player_id] || 0);
+      clubggNet.set(p.player_id, net);
+      combined.set(p.player_id, (combined.get(p.player_id) || 0) + net);
     }
     const nonzero = [...combined].map(([player_id, balance_cents]) => ({ player_id, balance_cents })).filter((x) => x.balance_cents !== 0);
     if (nonzero.length === 0) return reply.code(400).send({ error: "Nothing to settle — all balances are zero." });
