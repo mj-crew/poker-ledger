@@ -118,7 +118,7 @@ export default function Stats() {
       <h1>My Stats</h1>
       <div className="card">
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-          <span className="sub" style={{ margin: 0 }}>Your performance across both platforms.</span>
+          <h2 style={{ margin: 0 }}>Overall performance</h2>
           <span className="right" style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
             {PRESETS.map(([k, lbl]) => (
               <button key={k} className={"chip" + (preset === k ? " on" : "")} onClick={() => setPreset(k)}>{lbl}</button>
