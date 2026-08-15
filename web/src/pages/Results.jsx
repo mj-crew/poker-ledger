@@ -1,19 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, fmt, fmtDate } from "../api";
 import { useAuth } from "../auth.jsx";
+import PlatformLogo from "../components/PlatformLogo.jsx";
 
 const MEDAL = { 1: "🥇", 2: "🥈", 3: "🥉" };
-
-// Platform logo before the tournament name (falls back to a suit glyph if the
-// image is missing). Same assets as My Balance.
-function PlatformLogo({ platform }) {
-  const [ok, setOk] = useState(true);
-  const [src, glyph, color] = platform === "clubgg" ? ["/clubgg.png", "♣", "#e2e6ee"] : ["/pokerstars.png", "♠", "#d0021b"];
-  return ok
-    ? <img src={src} alt={platform} title={platform === "clubgg" ? "ClubGG" : "PokerStars"}
-        onError={() => setOk(false)} style={{ height: 18, width: "auto", maxWidth: 44, objectFit: "contain", verticalAlign: "middle" }} />
-    : <span style={{ color, fontSize: 15, lineHeight: 1 }} title={platform}>{glyph}</span>;
-}
 
 // Monday (as a YYYY-MM-DD key) of the week a tournament's date falls in.
 function weekKeyOf(playedOn) {

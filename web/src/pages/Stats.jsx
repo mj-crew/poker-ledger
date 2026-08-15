@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmt, fmtDate } from "../api";
+import PlatformLogo from "../components/PlatformLogo.jsx";
 
 // Local YYYY-MM-DD (not UTC, so "today" matches the player's calendar).
 const iso = (d) => {
@@ -70,12 +71,12 @@ function ByGame({ rows, unit }) {
   );
 }
 
-function Section({ title, badge, note, empty, children }) {
+function Section({ platform, title, note, empty, children }) {
   return (
     <div className="card">
-      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+      <div className="row" style={{ flexWrap: "wrap", gap: 9, alignItems: "center" }}>
+        <PlatformLogo platform={platform} size={18} />
         <h2 style={{ margin: 0 }}>{title}</h2>
-        {badge && <span className="sub gold" style={{ margin: 0 }}>{badge}</span>}
       </div>
       {note && <p className="sub" style={{ margin: "4px 0 0" }}>{note}</p>}
       {empty ? <p className="muted" style={{ margin: "12px 0 0" }}>Nothing in this period.</p> : children}
@@ -149,12 +150,12 @@ export default function Stats() {
 
       {s && (
         <>
-          <Section title="PokerStars — Tournaments" badge="♠ PokerStars" empty={s.tournaments === 0}>
+          <Section platform="pokerstars" title="Tournaments" empty={s.tournaments === 0}>
             <TournamentTiles s={s} />
             {s.first_played && <p className="sub" style={{ marginTop: 12 }}>{fmtDate(s.first_played)} → {fmtDate(s.last_played)}</p>}
           </Section>
 
-          <Section title="ClubGG — Tournaments" badge="♣ ClubGG"
+          <Section platform="clubgg" title="Tournaments"
             note="Prizes shown as paid by the house payout structure (positions from ClubGG, payouts re-computed — same split as PokerStars)."
             empty={!gt || gt.tournaments === 0}>
             {gt && (
@@ -166,7 +167,7 @@ export default function Stats() {
             )}
           </Section>
 
-          <Section title="ClubGG — Cash games" badge="♣ ClubGG" empty={!gc || gc.sessions === 0}>
+          <Section platform="clubgg" title="Cash games" empty={!gc || gc.sessions === 0}>
             {gc && (
               <>
                 <div className="tiles" style={{ marginTop: 14 }}>
