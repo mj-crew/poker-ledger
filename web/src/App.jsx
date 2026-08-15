@@ -21,7 +21,7 @@ function roleLabel(role) {
 }
 
 function Nav() {
-  const { player, logout, canAny, viewAsPlayer, setViewMode, isSuperadmin } = useAuth();
+  const { player, logout, canAny, viewAsPlayer, setViewMode, isSuperadmin, acting } = useAuth();
   const nav = useNavigate();
   return (
     <div className="nav">
@@ -40,20 +40,20 @@ function Nav() {
       {canAny("members.manage") && <NavLink to="/admin/members">Members</NavLink>}
       {canAny("settings.manage") && <NavLink to="/settings">Settings</NavLink>}
       <div className="spacer" />
-      {isSuperadmin && (
+      {isSuperadmin && !acting && (
         <button className={"viewtoggle" + (viewAsPlayer ? " on" : "")} onClick={() => setViewMode(!viewAsPlayer)}
           title="Preview the app as a regular player (admin controls only — your real access is unchanged)">
           {viewAsPlayer ? "👁 Player view" : "🛡 Admin view"}
         </button>
       )}
-      <span className="who">{player?.name}{viewAsPlayer ? " · player view" : (player?.role !== "player" ? ` · ${roleLabel(player?.role)}` : "")}</span>
+      <span className="who">{player?.name}{acting ? " · acting as" : viewAsPlayer ? " · player view" : (player?.role !== "player" ? ` · ${roleLabel(player?.role)}` : "")}</span>
       <button className="ghost small" onClick={() => { logout(); nav("/login"); }}>Log out</button>
     </div>
   );
 }
 
 function Protected({ children, need }) {
-  const { player, canAny, viewAsPlayer, setViewMode, isSuperadmin } = useAuth();
+  const { player, canAny, viewAsPlayer, setViewMode, isSuperadmin, acting, stopActAs } = useAuth();
   if (!player) return <Navigate to="/login" replace />;
   if (player.must_change_password) return <Navigate to="/change-password" replace />;
   if (need && !canAny(...need)) return <Navigate to="/" replace />;
@@ -61,7 +61,13 @@ function Protected({ children, need }) {
     <>
       <Nav />
       <div className="wrap">
-        {isSuperadmin && viewAsPlayer && (
+        {acting && (
+          <div className="actbanner">
+            🎭 You are acting as <strong>&nbsp;{player?.name}&nbsp;</strong> — you see their data, and anything you do is recorded as them.
+            <button className="linkbtn" style={{ marginLeft: 8 }} onClick={stopActAs}>Return to my account</button>
+          </div>
+        )}
+        {isSuperadmin && !acting && viewAsPlayer && (
           <div className="viewbanner">
             👁 Previewing as a regular player — admin tabs and controls are hidden.
             <button className="linkbtn" style={{ marginLeft: 8 }} onClick={() => setViewMode(false)}>Back to admin view</button>

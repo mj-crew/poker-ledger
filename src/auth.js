@@ -47,8 +47,25 @@ export function requireCap(cap) {
   };
 }
 
+// True when this token was minted by "act as a member" — the request is running
+// as the target, on behalf of the admin in `act_by`.
+export function isActingAs(req) {
+  return !!req.user?.act_by;
+}
+
+// preHandler: refuse anything that could escalate privilege while acting as
+// someone else (role/permission changes, password changes, nested act-as).
+export async function blockWhileActingAs(req, reply) {
+  if (isActingAs(req)) {
+    return reply.code(403).send({ error: "Not available while acting as another member. Return to your own account first." });
+  }
+}
+
 // preHandler: system administrator only (role/capability management).
 export async function requireSuperadmin(req, reply) {
+  // An act-as session must never reach superadmin-only routes, even if the
+  // member being acted as is themselves a superadmin.
+  if (isActingAs(req)) return reply.code(403).send({ error: "Not available while acting as another member" });
   const actor = await loadActor(req);
   if (!actor || actor.role !== "superadmin") return reply.code(403).send({ error: "System administrator only" });
   req.actor = actor;

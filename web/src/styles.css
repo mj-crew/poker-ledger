@@ -231,6 +231,11 @@ tr:last-child td { border-bottom: none; }
 .viewbanner { display:flex; align-items:center; flex-wrap:wrap; gap:4px; background: color-mix(in srgb, var(--gold) 14%, transparent);
   border:1px solid var(--gold); color: var(--gold); border-radius:10px; padding:9px 13px; margin-bottom:16px; font-size:13px; font-weight:600; }
 .viewbanner .linkbtn { color: var(--gold); }
+/* Acting as a member — deliberately louder than the player-view banner, since
+   actions taken here are attributed to someone else. */
+.actbanner { display:flex; align-items:center; flex-wrap:wrap; gap:4px; background: color-mix(in srgb, var(--neg) 16%, transparent);
+  border:1px solid var(--neg); color: var(--neg); border-radius:10px; padding:9px 13px; margin-bottom:16px; font-size:13px; font-weight:600; }
+.actbanner .linkbtn { color: var(--neg); }
 .caprow { display:flex; gap:10px; align-items:flex-start; padding:11px 13px; border:1px solid var(--line); border-radius:10px; background: var(--bg-2); }
 .caprow input { margin-top:3px; flex:0 0 auto; accent-color: var(--gold); }
 

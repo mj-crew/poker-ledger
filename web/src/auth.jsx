@@ -15,6 +15,9 @@ export function AuthProvider({ children }) {
     localStorage.setItem("pl_view_as_player", v ? "1" : "0");
     setViewAsPlayer(v);
   }
+  // "Act as a member": the real admin session is parked under pl_admin_* while a
+  // member's token drives the app, so we can hand it straight back on exit.
+  const [acting, setActing] = useState(() => !!localStorage.getItem("pl_admin_token"));
 
   // Refresh role + capabilities from the server on load, so changes the system
   // administrator makes take effect without the user logging out and back in.
@@ -37,11 +40,40 @@ export function AuthProvider({ children }) {
     return player;
   }
 
+  // Step into a member's account. Full page load so nothing admin-flavoured is
+  // left in memory from the previous session.
+  async function actAs(playerId) {
+    const { token, player: target } = await api.post("/auth/act-as", { player_id: playerId });
+    localStorage.setItem("pl_admin_token", localStorage.getItem("pl_token"));
+    localStorage.setItem("pl_admin_player", localStorage.getItem("pl_player"));
+    localStorage.setItem("pl_token", token);
+    localStorage.setItem("pl_player", JSON.stringify(target));
+    localStorage.setItem("pl_view_as_player", "0");
+    setActing(true);
+    location.href = "/";
+  }
+
+  // Hand the parked admin session back.
+  function stopActAs() {
+    const t = localStorage.getItem("pl_admin_token");
+    const p = localStorage.getItem("pl_admin_player");
+    if (!t) return;
+    localStorage.setItem("pl_token", t);
+    localStorage.setItem("pl_player", p);
+    localStorage.removeItem("pl_admin_token");
+    localStorage.removeItem("pl_admin_player");
+    setActing(false);
+    location.href = "/admin/members";
+  }
+
   function logout() {
     localStorage.removeItem("pl_token");
     localStorage.removeItem("pl_player");
     localStorage.removeItem("pl_view_as_player");
+    localStorage.removeItem("pl_admin_token");
+    localStorage.removeItem("pl_admin_player");
     setViewAsPlayer(false);
+    setActing(false);
     setPlayer(null);
   }
 
@@ -63,7 +95,8 @@ export function AuthProvider({ children }) {
   const isSuperadmin = player?.role === "superadmin";
 
   return (
-    <Ctx.Provider value={{ player, login, logout, update, can, canAny, viewAsPlayer, setViewMode, isSuperadmin }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ player, login, logout, update, can, canAny, viewAsPlayer, setViewMode, isSuperadmin,
+                           acting, actAs, stopActAs }}>{children}</Ctx.Provider>
   );
 }
 

@@ -92,6 +92,13 @@ async function main() {
      )`,
     // Member-submitted expenses need admin approval; only 'approved' ones settle.
     "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved'",
+    // Audit trail for "act as a member" — who stepped into whose account, and when.
+    `CREATE TABLE IF NOT EXISTS act_as_log (
+       id BIGSERIAL PRIMARY KEY,
+       actor_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
+       target_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
+       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+     )`,
   ];
   for (const a of alters) await pool.query(a);
 

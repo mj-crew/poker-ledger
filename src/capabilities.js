@@ -10,6 +10,7 @@ export const CAPABILITIES = [
   { key: "settlement.reset",  label: "Start new week (reset balances)", desc: "Zero everyone's balance to begin a fresh week." },
   { key: "settlement.settle", label: "Mark a week settled",           desc: "Record that a week has been fully paid up." },
   { key: "members.manage",    label: "Manage members",                desc: "Create player accounts and reset their passwords." },
+  { key: "members.actas",     label: "Act as a member",               desc: "Sign in as any member to help them — every switch is logged." },
   { key: "settings.manage",   label: "Manage settings",               desc: "Edit the house payout structure." },
 ];
 

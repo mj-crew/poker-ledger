@@ -11,8 +11,9 @@ function RoleBadge({ role }) {
 }
 
 export default function AdminMembers() {
-  const { player: me } = useAuth();
+  const { player: me, can, actAs } = useAuth();
   const isSuper = me?.role === "superadmin";
+  const canActAs = can("members.actas");
 
   const [players, setPlayers] = useState([]);
   const [catalog, setCatalog] = useState([]);
@@ -52,6 +53,11 @@ export default function AdminMembers() {
     if (okMsg) flash(okMsg);
     load();
     return r;
+  }
+
+  async function act(p) {
+    if (!confirm(`Act as ${p.first_name} [${p.username}]?\n\nYou'll see the app as they do, and anything you do is recorded as them. This switch is logged.`)) return;
+    try { await actAs(p.id); } catch (e) { setErr(e.message); }
   }
 
   const editing = players.find((p) => p.id === editId) || null;
@@ -106,7 +112,13 @@ export default function AdminMembers() {
                 <td className="muted">{p.clubgg_handle || "—"}</td>
                 <td><RoleBadge role={p.role} /></td>
                 <td><span className={"badge " + (p.active ? "ok" : "gray")}>{p.active ? "active" : "inactive"}</span></td>
-                <td className="num"><button className="ghost small" title="Edit member" onClick={() => setEditId(p.id)}>✏️</button></td>
+                <td className="num" style={{ whiteSpace: "nowrap" }}>
+                  {canActAs && p.active && p.id !== me?.id && (
+                    <button className="ghost small" title={`Act as ${p.first_name} — you'll see the app exactly as they do`}
+                      onClick={() => act(p)} style={{ marginRight: 6 }}>🎭</button>
+                  )}
+                  <button className="ghost small" title="Edit member" onClick={() => setEditId(p.id)}>✏️</button>
+                </td>
               </tr>
             ))}
             {players.length === 0 && <tr><td colSpan={8} className="muted">No members.</td></tr>}

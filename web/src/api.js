@@ -15,9 +15,20 @@ async function req(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401) {
-    localStorage.removeItem("pl_token");
-    localStorage.removeItem("pl_player");
-    if (!location.pathname.startsWith("/login")) location.href = "/login";
+    // An act-as token expires after 2h. Don't log the admin out over it — hand
+    // their own parked session back instead.
+    const adminTok = localStorage.getItem("pl_admin_token");
+    if (adminTok) {
+      localStorage.setItem("pl_token", adminTok);
+      localStorage.setItem("pl_player", localStorage.getItem("pl_admin_player"));
+      localStorage.removeItem("pl_admin_token");
+      localStorage.removeItem("pl_admin_player");
+      location.href = "/admin/members";
+    } else {
+      localStorage.removeItem("pl_token");
+      localStorage.removeItem("pl_player");
+      if (!location.pathname.startsWith("/login")) location.href = "/login";
+    }
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
