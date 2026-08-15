@@ -109,7 +109,7 @@ export default function Expenses() {
             <div style={{ width: 170 }}><label>Claimed by</label>
               <select value={playerId} onChange={(e) => setPlayerId(e.target.value)} required>
                 <option value="">— select —</option>
-                {roster.map((p) => <option key={p.id} value={p.id}>{p.first_name}</option>)}
+                {roster.map((p) => <option key={p.id} value={p.id}>{p.first_name} [{p.username}]</option>)}
               </select>
             </div>
           )}
@@ -202,7 +202,7 @@ function EditExpenseModal({ e, roster, onClose, onSaved }) {
         <div className="grid c2" style={{ marginTop: 12 }}>
           <div style={{ gridColumn: "1 / -1" }}><label>Description</label><input value={desc} onChange={(ev) => setDesc(ev.target.value)} /></div>
           <div><label>Amount $</label><input type="number" step="0.01" value={amount} onChange={(ev) => setAmount(ev.target.value)} /></div>
-          <div><label>Claimed by</label><select value={playerId} onChange={(ev) => setPlayerId(ev.target.value)}><option value="">— select —</option>{roster.map((p) => <option key={p.id} value={p.id}>{p.first_name}</option>)}</select></div>
+          <div><label>Claimed by</label><select value={playerId} onChange={(ev) => setPlayerId(ev.target.value)}><option value="">— select —</option>{roster.map((p) => <option key={p.id} value={p.id}>{p.first_name} [{p.username}]</option>)}</select></div>
           <div><label>Date</label><input type="date" value={date} onChange={(ev) => setDate(ev.target.value)} /></div>
           <div><label>Receipt{e.has_receipt ? " (replace)" : ""}</label><div><ReceiptInput file={file} setFile={setFile} /></div></div>
         </div>
