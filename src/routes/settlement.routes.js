@@ -103,16 +103,20 @@ export default async function settlementRoutes(app) {
   // each tournament regardless of what ClubGG's own payout table says.
   // If the export is for the week just gone, finishing stacks + rake are also
   // pre-filled into the settlement columns (admin can still edit before lock).
-  const importBody = z.object({ data: z.string().min(1) }); // base64 xlsx
+  const importBody = z.object({
+    data: z.string().min(1),                       // base64 xlsx
+    import_stats: z.boolean().default(true),       // → gg_* tables (My Stats / Results)
+    populate_balances: z.boolean().default(false), // → settlement finishing stack + rake
+  });
   app.post("/clubgg/import", { preHandler: [app.authenticate, requireCap("settlement.lock")] }, async (req, reply) => {
-    const { data } = importBody.parse(req.body);
+    const { data, import_stats, populate_balances } = importBody.parse(req.body);
     let parsed;
     try {
       parsed = parseClubggExport(Buffer.from(data, "base64"));
     } catch (e) {
       return reply.code(400).send({ error: e.message || "Could not parse the file" });
     }
-    const { period, tournaments, cash_sessions, balances } = parsed;
+    const { period, tournaments, cash_sessions, balances, overview } = parsed;
 
     const structure = (await query(
       "SELECT payload FROM payout_structures WHERE is_default=TRUE ORDER BY id LIMIT 1"
@@ -140,13 +144,21 @@ export default async function settlementRoutes(app) {
 
     const warnings = [];
     let resultRows = 0;
-    await tx(async (c) => {
+    // House prizes per tournament are needed for the reconciliation even when
+    // stats aren't being written, so compute them up-front.
+    const housePrizes = new Map(); // tournament -> amounts[]
+    for (const t of tournaments) {
+      const { amounts, warnings: w } = computePayouts(structure, t.entries, t.pool_cents);
+      w.forEach((x) => warnings.push(`${t.title}: ${x}`));
+      housePrizes.set(t, amounts);
+    }
+
+    if (import_stats) await tx(async (c) => {
       await c.query("DELETE FROM gg_tournaments WHERE week_start=$1", [period.week_start]);
       await c.query("DELETE FROM gg_cash_sessions WHERE week_start=$1", [period.week_start]);
 
       for (const t of tournaments) {
-        const { amounts, warnings: w } = computePayouts(structure, t.entries, t.pool_cents);
-        w.forEach((x) => warnings.push(`${t.title}: ${x}`));
+        const amounts = housePrizes.get(t);
         const tr = await c.query(
           `INSERT INTO gg_tournaments (title, game_type, buyin_cents, fee_cents, entries, pool_cents, played_on, started_at, week_start, week_end)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
@@ -180,23 +192,71 @@ export default async function settlementRoutes(app) {
       for (const [pid, ggId] of learned) await c.query("UPDATE players SET clubgg_gg_id=$1 WHERE id=$2", [ggId, pid]);
     });
 
-    // Settlement pre-fill — only when this is the current/just-finished week,
-    // so importing an old export for stats can't clobber live settlement inputs.
-    const recent = (Date.now() - new Date(period.week_end + "T00:00:00").getTime()) / 86400000 <= 7;
-    let prefilled = 0;
-    if (recent) {
-      const rakeByPlayer = new Map();
-      for (const s of cash_sessions) {
-        const pid = byGgId.get(s.gg_id)?.id ?? [...learned.entries()].find(([, g]) => g === s.gg_id)?.[0]
-          ?? byNick.get(String(s.nickname || "").toLowerCase())?.id;
-        if (pid) rakeByPlayer.set(pid, (rakeByPlayer.get(pid) || 0) + s.rake_cents);
+    // ---- Reconciliation -----------------------------------------------------
+    // Stats and the settlement balances are populated independently (different
+    // sheets), so they must be checked against each other. Two questions:
+    //   1. Did we read the file correctly?  parsed cash + ClubGG-prize MTT net
+    //      must equal Club Overview's own P&L per player.
+    //   2. Do the balances agree with the stats?  (finishing stack − allocation)
+    //      must equal cash P&L + house tournament net.
+    // Anything off is reported for review rather than silently accepted.
+    const ggByPlayerKey = (gg_id, nickname) =>
+      byGgId.get(gg_id)?.id ?? byNick.get(String(nickname || "").toLowerCase())?.id ?? null;
+
+    const cashByGg = new Map(), rakeByGg = new Map();
+    for (const s of cash_sessions) {
+      cashByGg.set(s.gg_id, (cashByGg.get(s.gg_id) || 0) + s.pnl_cents);
+      rakeByGg.set(s.gg_id, (rakeByGg.get(s.gg_id) || 0) + s.rake_cents);
+    }
+    const ggMttByGg = new Map(), houseMttByGg = new Map();
+    for (const t of tournaments) {
+      const amounts = housePrizes.get(t);
+      for (const p of t.players) {
+        ggMttByGg.set(p.gg_id, (ggMttByGg.get(p.gg_id) || 0) + (p.gg_prize_cents - p.invested_cents));
+        houseMttByGg.set(p.gg_id, (houseMttByGg.get(p.gg_id) || 0) + ((amounts[p.finish_position - 1] ?? 0) - p.invested_cents));
       }
+    }
+
+    const parse_check = [];   // our parse vs ClubGG's own P&L
+    const fee_check = [];     // Club Overview Fee vs summed session rake
+    for (const o of overview) {
+      const mine = (cashByGg.get(o.gg_id) || 0) + (ggMttByGg.get(o.gg_id) || 0);
+      if (mine !== o.pnl_cents) {
+        parse_check.push({ nickname: o.nickname, ours_cents: mine, clubgg_cents: o.pnl_cents, diff_cents: mine - o.pnl_cents });
+      }
+      const sessionRake = rakeByGg.get(o.gg_id) || 0;
+      if (sessionRake !== o.fee_cents) {
+        fee_check.push({ nickname: o.nickname, overview_fee_cents: o.fee_cents, sessions_cents: sessionRake, diff_cents: o.fee_cents - sessionRake });
+      }
+    }
+
+    // Settlement side: finishing stack (Club Member Balance) + rake (Club
+    // Overview "Fee") vs what the stats say the player's week was worth.
+    const allocs = new Map((await query("SELECT id, clubgg_allocation_cents FROM players")).rows.map((r) => [r.id, r.clubgg_allocation_cents]));
+    const feeByGg = new Map(overview.map((o) => [o.gg_id, o.fee_cents]));
+    const prefill = [];       // rows we would/did write
+    const balance_check = []; // stats vs balances mismatches
+    for (const b of balances) {
+      const pid = ggByPlayerKey(b.gg_id, b.nickname);
+      if (!pid) continue;
+      const rake = feeByGg.get(b.gg_id) || 0;
+      prefill.push({ player_id: pid, gg_id: b.gg_id, nickname: b.nickname, chips_cents: b.chips_cents, rake_cents: rake });
+      const chipDelta = b.chips_cents - (allocs.get(pid) ?? 0);
+      const statsNet = (cashByGg.get(b.gg_id) || 0) + (houseMttByGg.get(b.gg_id) || 0);
+      if (chipDelta !== statsNet) {
+        balance_check.push({
+          nickname: b.nickname, chip_delta_cents: chipDelta, stats_net_cents: statsNet,
+          diff_cents: chipDelta - statsNet,
+        });
+      }
+    }
+
+    let prefilled = 0;
+    if (populate_balances) {
       await tx(async (c) => {
-        for (const b of balances) {
-          const pid = byGgId.get(b.gg_id)?.id ?? byNick.get(String(b.nickname || "").toLowerCase())?.id;
-          if (!pid) continue;
+        for (const p of prefill) {
           await c.query("UPDATE players SET clubgg_balance_cents=$1, clubgg_rake_cents=$2 WHERE id=$3",
-            [b.chips_cents, rakeByPlayer.get(pid) || 0, pid]);
+            [p.chips_cents, p.rake_cents, p.player_id]);
           prefilled++;
         }
       });
@@ -204,13 +264,19 @@ export default async function settlementRoutes(app) {
 
     return {
       period,
-      tournaments: tournaments.length,
+      imported_stats: import_stats,
+      tournaments: import_stats ? tournaments.length : 0,
       results: resultRows,
-      cash_sessions: cash_sessions.length,
+      cash_sessions: import_stats ? cash_sessions.length : 0,
+      populated_balances: populate_balances,
+      prefilled,
+      prefill_available: prefill.length,
       unmatched: [...unmatched],
       warnings,
-      prefilled: recent ? prefilled : 0,
-      prefill_skipped: !recent,
+      parse_check,
+      fee_check,
+      balance_check,
+      balanced: parse_check.length === 0 && fee_check.length === 0 && balance_check.length === 0,
     };
   });
 

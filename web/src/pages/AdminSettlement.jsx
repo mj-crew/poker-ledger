@@ -50,11 +50,17 @@ export default function AdminSettlement() {
     loadClubgg();
   }
 
-  // Weekly ClubGG club export (.xlsx) → tournament + cash stats, and (for the
-  // current week) pre-filled finishing stacks + rake below.
+  // Weekly ClubGG club export (.xlsx). Two independent jobs from one file:
+  //   • stats      → gg_* tables behind My Stats / Results
+  //   • balances   → "ClubGG End of the week balance" (Club Member Balance tab)
+  //                  and "Full rake contribution $" (Club Overview → Fee)
+  // They're written separately but must agree; the response reports any drift.
   const [importing, setImporting] = useState(false);
+  const [impStats, setImpStats] = useState(true);
+  const [impBalances, setImpBalances] = useState(false);
+  const [impReport, setImpReport] = useState(null);
   async function importReport(file) {
-    setImporting(true); setErr("");
+    setImporting(true); setErr(""); setImpReport(null);
     try {
       const data = await new Promise((resolve, reject) => {
         const r = new FileReader();
@@ -62,17 +68,13 @@ export default function AdminSettlement() {
         r.onerror = reject;
         r.readAsDataURL(file);
       });
-      const res = await api.post("/clubgg/import", { data });
-      const bits = [
-        `week ${res.period.week_start} → ${res.period.week_end}`,
-        `${res.tournaments} tournaments (${res.results} results)`,
-        `${res.cash_sessions} cash sessions`,
-        res.prefill_skipped ? "older week — stats only, settlement table untouched"
-                            : `finishing stacks + rake pre-filled for ${res.prefilled} players`,
-      ];
-      if (res.unmatched?.length) bits.push(`⚠ not matched: ${res.unmatched.join(", ")} — set their ClubGG name in Members`);
-      if (res.warnings?.length) bits.push(`⚠ ${res.warnings.join(" · ")}`);
-      flash(`Report imported: ${bits.join(" · ")}`);
+      const res = await api.post("/clubgg/import", { data, import_stats: impStats, populate_balances: impBalances });
+      setImpReport(res);
+      const bits = [`week ${res.period.week_start} → ${res.period.week_end}`];
+      if (res.imported_stats) bits.push(`stats: ${res.tournaments} tournaments, ${res.cash_sessions} cash sessions`);
+      bits.push(res.populated_balances ? `balances + rake written for ${res.prefilled} players`
+                                       : `balances NOT written (${res.prefill_available} available)`);
+      flash(`Report imported — ${bits.join(" · ")}`);
       loadClubgg();
     } catch (e) { setErr(e.message || "Import failed"); }
     finally { setImporting(false); }
@@ -166,11 +168,6 @@ export default function AdminSettlement() {
           <div className="row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <h2 style={{ margin: 0 }}>ClubGG week</h2>
             <span className="right row" style={{ gap: 10, alignItems: "center" }}>
-              <label className="ghost small" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", border: "1px solid var(--line)", borderRadius: 8, padding: "5px 10px" }}>
-                {importing ? "Importing…" : "📄 Import GG weekly report (.xlsx)"}
-                <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
-                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importReport(f); }} />
-              </label>
               <ScreenshotButton kind="clubgg_balances" label="📷 Upload GG balances" onResult={onGgBalances} />
               <span className="sub gold">Default allocation {fmt(cgAlloc)}</span>
             </span>
@@ -179,6 +176,85 @@ export default function AdminSettlement() {
             Enter each player's allocation (defaults to {fmt(cgAlloc)}, adjust if it differed), their Sunday finishing
             stack, and the cash-game rake they paid (rebated back). Net = (finishing − allocation) + rake − prorata expense share + expenses you claimed. Folds into the settlement when you lock.
           </p>
+
+          <div className="ggimport">
+            <div className="row" style={{ flexWrap: "wrap", gap: 14, alignItems: "center" }}>
+              <strong style={{ fontSize: 13 }}>📄 ClubGG weekly report (.xlsx)</strong>
+              <label className="caprow" style={{ cursor: "pointer", padding: "6px 10px", flex: "0 0 auto" }}>
+                <input type="checkbox" checked={impStats} onChange={(e) => setImpStats(e.target.checked)} style={{ width: "auto" }} />
+                <span style={{ fontSize: 12 }}>Import stats <span className="sub" style={{ display: "block" }}>My Stats + Results</span></span>
+              </label>
+              <label className="caprow" style={{ cursor: "pointer", padding: "6px 10px", flex: "0 0 auto" }}>
+                <input type="checkbox" checked={impBalances} onChange={(e) => setImpBalances(e.target.checked)} style={{ width: "auto" }} />
+                <span style={{ fontSize: 12 }}>Populate balances &amp; rake <span className="sub" style={{ display: "block" }}>overwrites the two columns below</span></span>
+              </label>
+              <label className="right" style={{ cursor: importing ? "default" : "pointer", display: "inline-flex", alignItems: "center",
+                border: "1px solid var(--line-2)", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700,
+                opacity: importing || (!impStats && !impBalances) ? 0.5 : 1 }}>
+                {importing ? "Importing…" : "Choose file…"}
+                <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing || (!impStats && !impBalances)}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importReport(f); }} />
+              </label>
+            </div>
+
+            {impReport && (
+              <div className="ggrecon">
+                <div className={"reconhead " + (impReport.balanced ? "ok" : "warn")}>
+                  {impReport.balanced
+                    ? "✓ Stats and balances reconcile — everything agrees."
+                    : "⚠ Out of balance — review before locking the week."}
+                  <span className="sub" style={{ marginLeft: 8 }}>
+                    week {impReport.period.week_start} → {impReport.period.week_end}
+                  </span>
+                </div>
+                {impReport.parse_check?.length > 0 && (
+                  <p className="sub">
+                    <strong>Report doesn't add up</strong> (our figures vs ClubGG's own P&L):{" "}
+                    {impReport.parse_check.map((x) => `${x.nickname} ${fmt(x.diff_cents)}`).join(" · ")}
+                  </p>
+                )}
+                {impReport.fee_check?.length > 0 && (
+                  <p className="sub">
+                    <strong>Rake mismatch</strong> (Club Overview “Fee” vs cash sessions):{" "}
+                    {impReport.fee_check.map((x) => `${x.nickname} ${fmt(x.diff_cents)}`).join(" · ")}
+                  </p>
+                )}
+                {impReport.balance_check?.length > 0 && (
+                  <>
+                    <p className="sub" style={{ marginBottom: 4 }}>
+                      <strong>Balances vs stats</strong> — finishing stack minus allocation should equal the player's
+                      tournament + cash result. Usually means the post-tournament chip transfer (house payout split)
+                      hasn't been made on ClubGG yet:
+                    </p>
+                    <table className="mini">
+                      <thead><tr><th>Player</th><th className="num">From balances</th><th className="num">From stats</th><th className="num">Difference</th></tr></thead>
+                      <tbody>
+                        {impReport.balance_check.map((x) => (
+                          <tr key={x.nickname}>
+                            <td>{x.nickname}</td>
+                            <td className="num">{fmt(x.chip_delta_cents)}</td>
+                            <td className="num">{fmt(x.stats_net_cents)}</td>
+                            <td className={"num " + (x.diff_cents === 0 ? "" : x.diff_cents > 0 ? "pos" : "neg")}>{fmt(x.diff_cents)}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <td className="muted">Total</td><td /><td />
+                          <td className={"num " + (impReport.balance_check.reduce((s, x) => s + x.diff_cents, 0) === 0 ? "muted" : "neg")}>
+                            {fmt(impReport.balance_check.reduce((s, x) => s + x.diff_cents, 0))}
+                            {impReport.balance_check.reduce((s, x) => s + x.diff_cents, 0) === 0 && " — nets to zero"}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </>
+                )}
+                {impReport.unmatched?.length > 0 && (
+                  <p className="sub"><strong>Not matched to a member:</strong> {impReport.unmatched.join(", ")} — set their ClubGG name in Members.</p>
+                )}
+                {impReport.warnings?.length > 0 && <p className="sub">⚠ {impReport.warnings.join(" · ")}</p>}
+              </div>
+            )}
+          </div>
           <table>
             <thead><tr>
               <th>Player</th><th className="ctr">ClubGG Weekly Allocation</th><th className="ctr">Midweek Club GG Cash Position</th><th className="ctr">ClubGG End of the week balance</th><th className="ctr">Full rake contribution $</th><th className="ctr">Club GG Prorata weekly expenses $</th>

@@ -128,11 +128,25 @@ export function parseClubggExport(buffer) {
     flush();
   }
 
-  // ---- Finishing balances ---------------------------------------------------
+  // ---- Finishing balances ("Club Member Balance" → Chips) --------------------
   const balances = [];
   for (const r of sheetRows(wb, "Club Member Balance")) {
     if (isGgId(r?.[7])) balances.push({ gg_id: r[7], nickname: r[8], chips_cents: cents(r[9]) });
   }
 
-  return { period, tournaments, cash_sessions: [...byKey.values()], balances };
+  // ---- Club Overview: the authoritative per-player weekly Fee (rake paid) and
+  // ClubGG's own P&L. Fee feeds the settlement's rake column; P&L is the
+  // cross-check that our parsed tournament+cash figures add up.
+  const overview = [];
+  for (const r of sheetRows(wb, "Club Overview")) {
+    if (isGgId(r?.[7])) {
+      overview.push({
+        gg_id: r[7], nickname: r[8],
+        games: Math.round(num(r[9])), hands: Math.round(num(r[10])),
+        fee_cents: cents(r[11]), pnl_cents: cents(r[19]),
+      });
+    }
+  }
+
+  return { period, tournaments, cash_sessions: [...byKey.values()], balances, overview };
 }
