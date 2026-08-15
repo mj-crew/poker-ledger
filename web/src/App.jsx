@@ -4,6 +4,7 @@ import Login from "./pages/Login.jsx";
 import ChangePassword from "./pages/ChangePassword.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import MyAccount from "./pages/MyAccount.jsx";
+import AccountDetails from "./pages/AccountDetails.jsx";
 import Stats from "./pages/Stats.jsx";
 import Results from "./pages/Results.jsx";
 import AdminTournaments from "./pages/AdminTournaments.jsx";
@@ -31,6 +32,7 @@ function Nav() {
       <NavLink to="/results">Results</NavLink>
       <NavLink to="/account">My Balance</NavLink>
       <NavLink to="/stats">My Stats</NavLink>
+      <NavLink to="/my-account">My Account</NavLink>
       {canAny(...NIGHTS_CAPS) && <NavLink to="/admin/tournaments">Tournaments</NavLink>}
       {canAny(...SETTLE_CAPS) && <NavLink to="/admin/settlement">Settlement</NavLink>}
       {canAny("members.manage") && <NavLink to="/admin/members">Members</NavLink>}
@@ -77,6 +79,7 @@ export default function App() {
       <Route path="/" element={<Protected><Dashboard /></Protected>} />
       <Route path="/account" element={<Protected><MyAccount /></Protected>} />
       <Route path="/stats" element={<Protected><Stats /></Protected>} />
+      <Route path="/my-account" element={<Protected><AccountDetails /></Protected>} />
       <Route path="/results" element={<Protected><Results /></Protected>} />
       <Route path="/admin" element={<Navigate to="/admin/tournaments" replace />} />
       <Route path="/admin/tournaments" element={<Protected need={NIGHTS_CAPS}><AdminTournaments /></Protected>} />

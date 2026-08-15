@@ -6,6 +6,21 @@ function StatusBadge({ t }) {
   return <span className={"badge " + st.cls}>{st.text}</span>;
 }
 
+// Receiver name + a button that reveals their PayID (the number you pay to).
+function PayTo({ name, payid }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <div>{name}</div>
+      {payid
+        ? (show
+            ? <button className="linkbtn" onClick={() => setShow(false)}><strong style={{ color: "var(--gold)" }}>PayID {payid}</strong> · hide</button>
+            : <button className="linkbtn" onClick={() => setShow(true)}>💳 Show PayID</button>)
+        : <span className="muted" style={{ fontSize: 12 }}>no PayID on file</span>}
+    </div>
+  );
+}
+
 // Loads a brand logo from /public; falls back to a coloured suit glyph if absent.
 function BrandIcon({ src, glyph, color, size = 20 }) {
   const [ok, setOk] = useState(true);
@@ -70,7 +85,7 @@ export default function MyAccount() {
           <tbody>
             {data.i_owe.map((s) => (
               <tr key={s.id}>
-                <td>{s.to_name}</td><td className="muted">{s.period || "—"}</td>
+                <td><PayTo name={s.to_name} payid={s.to_payid} /></td><td className="muted">{s.period || "—"}</td>
                 <td className="num">{fmt(s.amount_cents)}</td>
                 <td><StatusBadge t={s} /></td>
                 <td className="num">

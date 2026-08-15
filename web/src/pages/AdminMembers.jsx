@@ -126,6 +126,8 @@ function EditMemberModal({ p, me, isSuper, catalog, onClose, patch }) {
   const [first, setFirst] = useState(p.first_name || "");
   const [last, setLast] = useState(p.last_name || "");
   const [phone, setPhone] = useState(p.phone || "");
+  const [email, setEmail] = useState(p.email || "");
+  const [payid, setPayid] = useState(p.payid || "");
   const [username, setUsername] = useState(p.username || "");
   const [clubgg, setClubgg] = useState(p.clubgg_handle || "");
   const [role, setRole] = useState(p.role);
@@ -142,7 +144,7 @@ function EditMemberModal({ p, me, isSuper, catalog, onClose, patch }) {
   async function save() {
     setBusy(true); setErr("");
     try {
-      const body = { first_name: first, last_name: last, phone, username, clubgg_handle: clubgg, active };
+      const body = { first_name: first, last_name: last, phone, email, payid, username, clubgg_handle: clubgg, active };
       if (editableRole && role !== p.role) body.role = role;
       await patch(p.id, body);
       onClose();
@@ -173,6 +175,8 @@ function EditMemberModal({ p, me, isSuper, catalog, onClose, patch }) {
           <div><label>First name</label><input value={first} onChange={(e) => setFirst(e.target.value)} /></div>
           <div><label>Last name</label><input value={last} onChange={(e) => setLast(e.target.value)} placeholder="members only" /></div>
           <div><label>Phone</label><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="members only" /></div>
+          <div><label>Email</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="for notifications" /></div>
+          <div><label>PayID</label><input value={payid} onChange={(e) => setPayid(e.target.value)} placeholder="phone linked to PayID" /></div>
           <div><label>PokerStars screen name</label><input value={username} onChange={(e) => setUsername(e.target.value)} /></div>
           <div><label>ClubGG name</label><input value={clubgg} onChange={(e) => setClubgg(e.target.value)} placeholder="—" /></div>
         </div>

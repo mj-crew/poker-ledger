@@ -1,8 +1,35 @@
+import { z } from "zod";
 import { query } from "../db.js";
 
 // "My Account": current balance, recent ledger movements, and settlement transfers
 // where the logged-in player pays or receives.
 export default async function accountRoutes(app) {
+  // Self-service: the logged-in player's own editable details (not screen names).
+  app.get("/account/me", { preHandler: [app.authenticate] }, async (req) => {
+    return (await query(
+      "SELECT id, first_name, last_name, phone, email, payid, username, name, (SELECT max(handle) FROM handle_aliases h WHERE h.player_id=players.id AND h.platform='clubgg') AS clubgg_handle FROM players WHERE id=$1",
+      [req.user.id]
+    )).rows[0];
+  });
+
+  const meBody = z.object({
+    first_name: z.string().min(1).optional(),
+    last_name: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().optional(),
+    payid: z.string().optional(),
+  });
+  app.patch("/account/me", { preHandler: [app.authenticate] }, async (req) => {
+    const b = meBody.parse(req.body);
+    const id = req.user.id;
+    await query(
+      `UPDATE players SET first_name=COALESCE($1,first_name), last_name=COALESCE($2,last_name),
+              phone=COALESCE($3,phone), email=COALESCE($4,email), payid=COALESCE($5,payid),
+              name = COALESCE($1,first_name) || ' [' || username || ']' WHERE id=$6`,
+      [b.first_name ?? null, b.last_name ?? null, b.phone ?? null, b.email ?? null, b.payid ?? null, id]
+    );
+    return (await query("SELECT id, first_name, last_name, phone, email, payid, username, name FROM players WHERE id=$1", [id])).rows[0];
+  });
   app.get("/account", { preHandler: [app.authenticate] }, async (req) => {
     const me = req.user.id;
 
@@ -24,7 +51,7 @@ export default async function accountRoutes(app) {
     const owe = (
       await query(
         `SELECT s.id, s.amount_cents, s.status, s.payer_marked_at, s.receiver_confirmed_at,
-                sp.label AS period, sp.status AS period_status, r.name AS to_name
+                sp.label AS period, sp.status AS period_status, r.name AS to_name, r.payid AS to_payid
          FROM settlements s JOIN players r ON r.id=s.to_player_id
          JOIN settlement_periods sp ON sp.id=s.period_id
          WHERE s.from_player_id=$1 ORDER BY s.id DESC`,

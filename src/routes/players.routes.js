@@ -7,7 +7,7 @@ export default async function playerRoutes(app) {
   // Everyone authed can see the roster (incl. role + capabilities for the admin UI).
   app.get("/", { preHandler: [app.authenticate] }, async () => {
     const { rows } = await query(
-      `SELECT p.id, p.name, p.first_name, p.last_name, p.phone, p.username, p.role, p.capabilities, p.active, p.clubgg_balance_cents,
+      `SELECT p.id, p.name, p.first_name, p.last_name, p.phone, p.email, p.payid, p.username, p.role, p.capabilities, p.active, p.clubgg_balance_cents,
               COALESCE(array_agg(h.handle) FILTER (WHERE h.platform='club' AND h.handle IS NOT NULL), '{}') AS handles,
               MAX(h.handle) FILTER (WHERE h.platform='clubgg') AS clubgg_handle
        FROM players p LEFT JOIN handle_aliases h ON h.player_id=p.id
@@ -20,6 +20,8 @@ export default async function playerRoutes(app) {
     first_name: z.string().min(1),
     last_name: z.string().optional().default(""),
     phone: z.string().optional().default(""),
+    email: z.string().optional().default(""),
+    payid: z.string().optional().default(""),
     username: z.string().min(1),
     role: z.enum(["admin", "player"]).default("player"),
     temp_password: z.string().min(6),
@@ -39,9 +41,9 @@ export default async function playerRoutes(app) {
     if (exists.rowCount) return reply.code(409).send({ error: "Username already taken" });
     const hash = await hashPassword(b.temp_password);
     const { rows } = await query(
-      `INSERT INTO players (first_name, last_name, phone, name, username, role, password_hash, must_change_password)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE) RETURNING id, name, first_name, last_name, phone, username, role, capabilities, active`,
-      [b.first_name, b.last_name ?? "", b.phone ?? "", label(b.first_name, b.username), b.username, b.role, hash]
+      `INSERT INTO players (first_name, last_name, phone, email, payid, name, username, role, password_hash, must_change_password)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE) RETURNING id, name, first_name, last_name, phone, email, payid, username, role, capabilities, active`,
+      [b.first_name, b.last_name ?? "", b.phone ?? "", b.email ?? "", b.payid ?? "", label(b.first_name, b.username), b.username, b.role, hash]
     );
     const player = rows[0];
     await query(
@@ -58,6 +60,8 @@ export default async function playerRoutes(app) {
     first_name: z.string().min(1).optional(),
     last_name: z.string().optional(),
     phone: z.string().optional(),
+    email: z.string().optional(),
+    payid: z.string().optional(),
     username: z.string().min(1).optional(), // PokerStars screen name = login + club handle
     role: z.enum(["superadmin", "admin", "player"]).optional(),
     capabilities: z.array(z.string()).optional(),
@@ -114,6 +118,8 @@ export default async function playerRoutes(app) {
       );
     }
     if (b.phone !== undefined) await query("UPDATE players SET phone=$1 WHERE id=$2", [b.phone, id]);
+    if (b.email !== undefined) await query("UPDATE players SET email=$1 WHERE id=$2", [b.email, id]);
+    if (b.payid !== undefined) await query("UPDATE players SET payid=$1 WHERE id=$2", [b.payid, id]);
     if (b.active !== undefined) await query("UPDATE players SET active=$1 WHERE id=$2", [b.active, id]);
     if (b.reset_password) {
       await query("UPDATE players SET password_hash=$1, must_change_password=TRUE WHERE id=$2",
@@ -125,7 +131,7 @@ export default async function playerRoutes(app) {
         await query("INSERT INTO handle_aliases (player_id, platform, handle) VALUES ($1,'clubgg',$2)", [id, b.clubgg_handle.trim()]);
     }
     const { rows } = await query(
-      "SELECT id, name, first_name, last_name, phone, username, role, capabilities, active FROM players WHERE id=$1", [id]
+      "SELECT id, name, first_name, last_name, phone, email, payid, username, role, capabilities, active FROM players WHERE id=$1", [id]
     );
     return rows[0];
   });

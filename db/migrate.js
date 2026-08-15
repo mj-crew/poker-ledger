@@ -74,6 +74,10 @@ async function main() {
     // players can see their current standing mid-week.
     "ALTER TABLE players ADD COLUMN IF NOT EXISTS clubgg_interim_cents INTEGER",
     "ALTER TABLE players ADD COLUMN IF NOT EXISTS clubgg_gg_id TEXT",
+    // Contact + payment details (member self-service). PayID = the phone number
+    // linked to a player's PayID, shown to whoever needs to pay them.
+    "ALTER TABLE players ADD COLUMN IF NOT EXISTS email TEXT",
+    "ALTER TABLE players ADD COLUMN IF NOT EXISTS payid TEXT",
   ];
   for (const a of alters) await pool.query(a);
 
