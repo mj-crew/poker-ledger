@@ -24,6 +24,36 @@ export default async function resultsRoutes(app) {
        LIMIT $1`,
       [limit]
     );
-    return rows;
+
+    // Imported ClubGG tournaments, mapped to the same card shape. Payouts are
+    // the HOUSE re-computed prizes (what actually changed hands), not ClubGG's.
+    const gg = (await query(
+      `SELECT g.id, g.title, g.game_type, g.buyin_cents, g.played_on, g.pool_cents, g.entries AS total_entries,
+              (SELECT COUNT(*)::int FROM gg_tournament_results WHERE tournament_id=g.id) AS players_count,
+              (SELECT json_agg(x) FROM (
+                 SELECT r.player_id, COALESCE(p.name, r.nickname) AS name, 1 AS entries, r.reentries,
+                        r.invested_cents, r.finish_position, r.house_prize_cents AS payout_cents, r.net_cents
+                 FROM gg_tournament_results r LEFT JOIN players p ON p.id=r.player_id
+                 WHERE r.tournament_id=g.id
+                 ORDER BY r.finish_position
+               ) x) AS players
+       FROM gg_tournaments g
+       ORDER BY g.played_on DESC, g.id DESC
+       LIMIT $1`,
+      [limit]
+    )).rows;
+
+    const all = [
+      ...rows.map((r) => ({ ...r, platform: "pokerstars" })),
+      ...gg.map((r) => ({
+        ...r,
+        id: `gg-${r.id}`, // avoid key collisions with app tournaments
+        tournament_type: "ClubGG",
+        reentry_cents: null,
+        platform: "clubgg",
+      })),
+    ];
+    all.sort((a, b) => (a.played_on < b.played_on ? 1 : a.played_on > b.played_on ? -1 : 0));
+    return all;
   });
 }

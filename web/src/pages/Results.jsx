@@ -4,6 +4,17 @@ import { useAuth } from "../auth.jsx";
 
 const MEDAL = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
+// Platform logo before the tournament name (falls back to a suit glyph if the
+// image is missing). Same assets as My Balance.
+function PlatformLogo({ platform }) {
+  const [ok, setOk] = useState(true);
+  const [src, glyph, color] = platform === "clubgg" ? ["/clubgg.png", "♣", "#e2e6ee"] : ["/pokerstars.png", "♠", "#d0021b"];
+  return ok
+    ? <img src={src} alt={platform} title={platform === "clubgg" ? "ClubGG" : "PokerStars"}
+        onError={() => setOk(false)} style={{ height: 18, width: "auto", maxWidth: 44, objectFit: "contain", verticalAlign: "middle" }} />
+    : <span style={{ color, fontSize: 15, lineHeight: 1 }} title={platform}>{glyph}</span>;
+}
+
 // Monday (as a YYYY-MM-DD key) of the week a tournament's date falls in.
 function weekKeyOf(playedOn) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(playedOn));
@@ -67,13 +78,15 @@ export default function Results() {
         const winner = (t.players || []).find((p) => p.finish_position === 1);
         return (
           <div className="card" key={t.id}>
-            <div className="row" style={{ flexWrap: "wrap" }}>
-              <strong>{t.game_type || "Tournament"}</strong>
-              <span className="badge gray">{t.tournament_type}</span>
+            <div className="row" style={{ flexWrap: "wrap", alignItems: "center" }}>
+              <PlatformLogo platform={t.platform} />
+              <strong>{t.platform === "clubgg" ? (t.title || t.game_type || "Tournament") : (t.game_type || "Tournament")}</strong>
+              {t.platform === "clubgg" && t.game_type && <span className="badge gray">{t.game_type}</span>}
+              {t.platform !== "clubgg" && <span className="badge gray">{t.tournament_type}</span>}
               <span className="lifepill completed"><span className="d" />Completed</span>
               <span className="right row" style={{ gap: 10 }}>
                 <span className="muted">{fmtDate(t.played_on)}</span>
-                {canReopen && <button className="small ghost" onClick={() => reopen(t.id)} title="Reverse payouts and edit results">Reopen</button>}
+                {canReopen && t.platform !== "clubgg" && <button className="small ghost" onClick={() => reopen(t.id)} title="Reverse payouts and edit results">Reopen</button>}
               </span>
             </div>
             <div className="row" style={{ margin: "10px 0", gap: 18, flexWrap: "wrap" }}>
@@ -87,8 +100,8 @@ export default function Results() {
                 <tr><th>Pos</th><th>Player</th><th className="num">Entries</th><th className="num">Re-entries</th><th className="num">Invested</th><th className="num">Payout</th><th className="num">Net</th></tr>
               </thead>
               <tbody>
-                {(t.players || []).map((p) => (
-                  <tr key={p.player_id}>
+                {(t.players || []).map((p, i) => (
+                  <tr key={p.player_id ?? `${p.name}-${i}`}>
                     <td>{MEDAL[p.finish_position] || (p.finish_position ?? "—")}</td>
                     <td>{p.name}</td>
                     <td className="num">{p.entries}</td>
