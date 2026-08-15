@@ -1,6 +1,33 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api, fmt, fmtDate, fileToImagePart } from "../api";
 import { useAuth } from "../auth.jsx";
+
+// Receipt picker: click to arm, then Ctrl+V a screenshot, or Browse for a file.
+function ReceiptInput({ file, setFile }) {
+  const [armed, setArmed] = useState(false);
+  const fileRef = useRef(null);
+  useEffect(() => {
+    if (!armed) return;
+    function onPaste(e) {
+      const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
+      if (item) { e.preventDefault(); setFile(item.getAsFile()); setArmed(false); }
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [armed]); // eslint-disable-line
+  return (
+    <span className="shotbtn">
+      <button type="button" className={"filebtn small" + (armed ? " armed" : "")}
+        onFocus={() => setArmed(true)} onBlur={() => setArmed(false)}
+        title="Click, then press Ctrl+V to paste a screenshot">
+        {armed ? "⌨ Ctrl+V to paste…" : file ? "✓ receipt attached" : "📎 Paste receipt"}
+      </button>
+      <button type="button" className="ghost small" onClick={() => fileRef.current?.click()}>Browse</button>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setFile(e.target.files?.[0] || null)} />
+      {file && <button type="button" className="ghost small" title="remove" onClick={() => setFile(null)}>✕</button>}
+    </span>
+  );
+}
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 function weekKeyOf(playedOn) {
@@ -83,7 +110,7 @@ export default function Expenses() {
             </div>
           )}
           <div style={{ width: 150 }}><label>Date</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-          <div style={{ width: 180 }}><label>Receipt</label><input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} /></div>
+          <div style={{ minWidth: 200 }}><label>Receipt</label><div><ReceiptInput file={file} setFile={setFile} /></div></div>
           <button style={{ alignSelf: "flex-end" }} disabled={busy}>{busy ? "Saving…" : canManage ? "Add" : "Submit"}</button>
         </form>
         {err && <div className="err">{err}</div>}
