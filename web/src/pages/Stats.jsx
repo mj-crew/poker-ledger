@@ -53,19 +53,20 @@ function TournamentTiles({ s }) {
   );
 }
 
-// Small per-game breakdown under the ClubGG sections (you play mixed games).
+// Per-game breakdown bubbles under the ClubGG sections (you play mixed games).
 function ByGame({ rows, unit }) {
   if (!rows?.length) return null;
   return (
-    <p className="sub" style={{ marginTop: 12 }}>
-      By game:{" "}
+    <div className="gamepills">
+      <span className="lead">By game</span>
       {rows.map((g, i) => (
-        <span key={g.game_type || i}>
-          {i > 0 && " · "}
-          <strong>{g.game_type || "?"}</strong> {g[unit]} — <span className={tone(g.net_cents)}>{fmt(g.net_cents)}</span>
+        <span key={g.game_type || i} className={"gamepill " + tone(g.net_cents)}>
+          <span className="g">{g.game_type || "?"}</span>
+          <span className="c">{g[unit]}</span>
+          <span className={"v " + tone(g.net_cents)}>{fmt(g.net_cents)}</span>
         </span>
       ))}
-    </p>
+    </div>
   );
 }
 
