@@ -30,11 +30,11 @@ function Nav() {
         <span className="brand-name">Flawless Poker <span className="suit">9♦&nbsp;4♦</span></span>
       </div>
       <NavLink to="/" end>Dashboard</NavLink>
-      <NavLink to="/results">Results</NavLink>
-      <NavLink to="/expenses">Expenses</NavLink>
       <NavLink to="/account">My Balance</NavLink>
+      <NavLink to="/results">Results</NavLink>
       <NavLink to="/stats">My Stats</NavLink>
       <NavLink to="/my-account">My Account</NavLink>
+      <NavLink to="/expenses">Expenses</NavLink>
       {canAny(...NIGHTS_CAPS) && <NavLink to="/admin/tournaments">Tournaments</NavLink>}
       {canAny(...SETTLE_CAPS) && <NavLink to="/admin/settlement">Settlement</NavLink>}
       {canAny("members.manage") && <NavLink to="/admin/members">Members</NavLink>}
