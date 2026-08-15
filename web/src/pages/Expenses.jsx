@@ -54,6 +54,7 @@ export default function Expenses() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [receipt, setReceipt] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
@@ -69,7 +70,10 @@ export default function Expenses() {
   }, []); // eslint-disable-line
 
   async function add(e) {
-    e.preventDefault(); setErr(""); setMsg(""); setBusy(true);
+    e.preventDefault(); setErr(""); setMsg("");
+    if (canManage && !playerId) { setErr("Choose who the expense is claimed by."); return; }
+    if (!file) { setErr("Attach a receipt (paste or browse)."); return; }
+    setBusy(true);
     try {
       let receipt_data_url;
       if (file) { const { media_type, data } = await fileToImagePart(file); receipt_data_url = `data:${media_type};base64,${data}`; }
@@ -143,9 +147,11 @@ export default function Expenses() {
                     <td className="ctr">{x.has_receipt ? <button className="linkbtn" onClick={() => viewReceipt(x.id)}>View</button> : <span className="muted">—</span>}</td>
                     <td className="ctr"><ExpStatus s={x.status} /></td>
                     {canManage && <td className="num" style={{ whiteSpace: "nowrap" }}>
-                      {x.status === "pending"
-                        ? <><button className="small pos" onClick={() => approve(x.id)}>Approve</button> <button className="ghost small danger" onClick={() => reject(x.id)}>Reject</button></>
-                        : <button className="ghost small danger" onClick={() => del(x.id)}>Delete</button>}
+                      {x.locked ? <span className="muted">🔒 locked</span> : <>
+                        {x.status === "pending" && <><button className="small pos" onClick={() => approve(x.id)}>Approve</button>{" "}<button className="ghost small danger" onClick={() => reject(x.id)}>Reject</button>{" "}</>}
+                        <button className="ghost small" onClick={() => setEditing(x)}>Edit</button>{" "}
+                        <button className="ghost small danger" onClick={() => del(x.id)}>Delete</button>
+                      </>}
                     </td>}
                   </tr>
                 ))}
@@ -163,6 +169,49 @@ export default function Expenses() {
           </div>
         </div>
       )}
+
+      {editing && <EditExpenseModal e={editing} roster={roster} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
     </>
+  );
+}
+
+function EditExpenseModal({ e, roster, onClose, onSaved }) {
+  const [desc, setDesc] = useState(e.description);
+  const [amount, setAmount] = useState((e.amount_cents / 100).toString());
+  const [playerId, setPlayerId] = useState(e.player_id ? String(e.player_id) : "");
+  const [date, setDate] = useState(String(e.played_on).slice(0, 10));
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function save() {
+    if (!playerId) { setErr("Choose who the expense is claimed by."); return; }
+    setBusy(true); setErr("");
+    try {
+      const body = { description: desc, amount_cents: Math.round((parseFloat(amount) || 0) * 100), player_id: +playerId, played_on: date };
+      if (file) { const { media_type, data } = await fileToImagePart(file); body.receipt_data_url = `data:${media_type};base64,${data}`; }
+      await api.patch(`/expenses/${e.id}`, body);
+      onSaved();
+    } catch (er) { setErr(er.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="modal-overlay" onMouseDown={(ev) => { if (ev.target === ev.currentTarget) onClose(); }}>
+      <div className="modal">
+        <div className="row"><h2 style={{ margin: 0 }}>Edit expense</h2><button className="right ghost small" onClick={onClose}>✕</button></div>
+        <div className="grid c2" style={{ marginTop: 12 }}>
+          <div style={{ gridColumn: "1 / -1" }}><label>Description</label><input value={desc} onChange={(ev) => setDesc(ev.target.value)} /></div>
+          <div><label>Amount $</label><input type="number" step="0.01" value={amount} onChange={(ev) => setAmount(ev.target.value)} /></div>
+          <div><label>Claimed by</label><select value={playerId} onChange={(ev) => setPlayerId(ev.target.value)}><option value="">— select —</option>{roster.map((p) => <option key={p.id} value={p.id}>{p.first_name}</option>)}</select></div>
+          <div><label>Date</label><input type="date" value={date} onChange={(ev) => setDate(ev.target.value)} /></div>
+          <div><label>Receipt{e.has_receipt ? " (replace)" : ""}</label><div><ReceiptInput file={file} setFile={setFile} /></div></div>
+        </div>
+        {err && <div className="err">{err}</div>}
+        <div className="row" style={{ marginTop: 16 }}>
+          <button className="ghost small" onClick={onClose}>Close</button>
+          <button className="right" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save changes"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
