@@ -12,7 +12,7 @@ function RakeSummary({ period }) {
     api.get("/clubgg/rake").then(setRake).catch(() => {});
     api.get("/expenses").then((rows) => {
       const { start, end } = runningWeekBounds(period);
-      setExpWk(rows.filter((x) => { const d = toLocal(x.played_on); return d >= start && d <= end; }).reduce((s, x) => s + x.amount_cents, 0));
+      setExpWk(rows.filter((x) => x.status === "approved" && (() => { const d = toLocal(x.played_on); return d >= start && d <= end; })()).reduce((s, x) => s + x.amount_cents, 0));
     }).catch(() => {});
   }, [period]);
   if (!rake) return null;

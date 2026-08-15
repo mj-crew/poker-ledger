@@ -102,7 +102,7 @@ export default function AdminSettlement() {
   const weekStart = runningWeekBounds(periods[0]).start;
   const inWeek = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d)); const x = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(d); return x >= weekStart && x <= weekEnd; };
   const claimedMap = {}; let totalClaimed = 0;
-  for (const e of allExpenses) if (e.player_id && inWeek(e.played_on)) { claimedMap[e.player_id] = (claimedMap[e.player_id] || 0) + e.amount_cents; totalClaimed += e.amount_cents; }
+  for (const e of allExpenses) if (e.player_id && e.status === "approved" && inWeek(e.played_on)) { claimedMap[e.player_id] = (claimedMap[e.player_id] || 0) + e.amount_cents; totalClaimed += e.amount_cents; }
   const rakeCentsOf = (pid) => Math.round((parseFloat(cgRake[pid]) || 0) * 100);
   const shares = allocateProrata((cg?.players || []).map((p) => ({ id: p.player_id, weight: rakeCentsOf(p.player_id) })), totalClaimed);
 

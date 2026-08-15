@@ -125,7 +125,7 @@ export default async function settlementRoutes(app) {
     let totalClaimed = 0;
     if (b.starts_on && b.ends_on) {
       for (const e of (await query(
-        "SELECT player_id, amount_cents FROM expenses WHERE player_id IS NOT NULL AND played_on BETWEEN $1 AND $2",
+        "SELECT player_id, amount_cents FROM expenses WHERE player_id IS NOT NULL AND status='approved' AND played_on BETWEEN $1 AND $2",
         [b.starts_on, b.ends_on]
       )).rows) { claimed[e.player_id] = (claimed[e.player_id] || 0) + e.amount_cents; totalClaimed += e.amount_cents; }
     }

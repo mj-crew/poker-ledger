@@ -90,6 +90,8 @@ async function main() {
        created_by BIGINT,
        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
      )`,
+    // Member-submitted expenses need admin approval; only 'approved' ones settle.
+    "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved'",
   ];
   for (const a of alters) await pool.query(a);
 

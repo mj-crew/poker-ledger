@@ -16,6 +16,9 @@ function weekLabel(key) {
   return `${f(new Date(y, m - 1, d))} - ${f(new Date(y, m - 1, d + 6))}`;
 }
 
+const EXP_STATUS = { pending: ["pend", "Pending"], approved: ["ok", "Approved"], rejected: ["gray", "Rejected"] };
+function ExpStatus({ s }) { const [cls, label] = EXP_STATUS[s] || ["gray", s]; return <span className={"badge " + cls}>{label}</span>; }
+
 export default function Expenses() {
   const { can } = useAuth();
   const canManage = can("settlement.lock");
@@ -43,12 +46,15 @@ export default function Expenses() {
     try {
       let receipt_data_url;
       if (file) { const { media_type, data } = await fileToImagePart(file); receipt_data_url = `data:${media_type};base64,${data}`; }
-      await api.post("/expenses", { description: desc, amount_cents: Math.round((parseFloat(amount) || 0) * 100), player_id: playerId ? +playerId : null, played_on: date, receipt_data_url });
-      setMsg("Expense added."); setDesc(""); setAmount(""); setPlayerId(""); setFile(null);
+      await api.post("/expenses", { description: desc, amount_cents: Math.round((parseFloat(amount) || 0) * 100), player_id: canManage ? (playerId ? +playerId : null) : undefined, played_on: date, receipt_data_url });
+      setMsg(canManage ? "Expense added." : "Submitted for approval — you'll be reimbursed from the rake once an admin approves it.");
+      setDesc(""); setAmount(""); setPlayerId(""); setFile(null);
       setTimeout(() => setMsg(""), 4000); load();
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
   async function del(id) { if (!confirm("Delete this expense?")) return; try { await api.del(`/expenses/${id}`); load(); } catch (e) { setErr(e.message); } }
+  async function approve(id) { try { await api.post(`/expenses/${id}/approve`); load(); } catch (e) { setErr(e.message); } }
+  async function reject(id) { if (!confirm("Reject this expense?")) return; try { await api.post(`/expenses/${id}/reject`); load(); } catch (e) { setErr(e.message); } }
   async function viewReceipt(id) { try { const r = await api.get(`/expenses/${id}/receipt`); setReceipt(r.receipt_data_url); } catch (e) { setErr(e.message); } }
 
   if (!rows) return <><h1>Expenses</h1><p className="muted">{err || "Loading…"}</p></>;
@@ -62,39 +68,44 @@ export default function Expenses() {
       <h1>Expenses</h1>
       <p className="sub" style={{ marginBottom: 16 }}>Club spending, covered from the rake. Whoever claims an expense is reimbursed at settlement; the cost is shared across players by their rake contribution.</p>
 
-      {canManage && (
-        <div className="card">
-          <h2>Add expense</h2>
-          <form className="row" onSubmit={add} style={{ flexWrap: "wrap" }}>
-            <div style={{ flex: 2, minWidth: 180 }}><label>Description</label><input value={desc} onChange={(e) => setDesc(e.target.value)} required /></div>
-            <div style={{ width: 110 }}><label>Amount $</label><input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required /></div>
+      <div className="card">
+        <h2>{canManage ? "Add expense" : "Submit an expense"}</h2>
+        {!canManage && <p className="sub" style={{ marginTop: 4 }}>Attach the receipt. It goes to an admin for approval, then you're reimbursed from the rake at settlement.</p>}
+        <form className="row" onSubmit={add} style={{ flexWrap: "wrap", marginTop: 8 }}>
+          <div style={{ flex: 2, minWidth: 180 }}><label>Description</label><input value={desc} onChange={(e) => setDesc(e.target.value)} required /></div>
+          <div style={{ width: 110 }}><label>Amount $</label><input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required /></div>
+          {canManage && (
             <div style={{ width: 170 }}><label>Claimed by</label>
               <select value={playerId} onChange={(e) => setPlayerId(e.target.value)} required>
                 <option value="">— select —</option>
                 {roster.map((p) => <option key={p.id} value={p.id}>{p.first_name}</option>)}
               </select>
             </div>
-            <div style={{ width: 150 }}><label>Date</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-            <div style={{ width: 180 }}><label>Receipt</label><input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} /></div>
-            <button style={{ alignSelf: "flex-end" }} disabled={busy}>{busy ? "Adding…" : "Add"}</button>
-          </form>
-          {err && <div className="err">{err}</div>}
-          {msg && <div className="sub" style={{ color: "var(--pos)", marginTop: 8 }}>{msg}</div>}
-        </div>
-      )}
+          )}
+          <div style={{ width: 150 }}><label>Date</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          <div style={{ width: 180 }}><label>Receipt</label><input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} /></div>
+          <button style={{ alignSelf: "flex-end" }} disabled={busy}>{busy ? "Saving…" : canManage ? "Add" : "Submit"}</button>
+        </form>
+        {err && <div className="err">{err}</div>}
+        {msg && <div className="sub" style={{ color: "var(--pos)", marginTop: 8 }}>{msg}</div>}
+      </div>
 
-      {weekKeys.length === 0 && <div className="card muted">No expenses recorded yet.</div>}
+      {weekKeys.length === 0 && <div className="card muted">No expenses yet.</div>}
       {weekKeys.map((k) => {
         const items = byWeek[k];
-        const total = items.reduce((s, x) => s + x.amount_cents, 0);
+        const total = items.filter((x) => x.status === "approved").reduce((s, x) => s + x.amount_cents, 0);
+        const pending = items.filter((x) => x.status === "pending").length;
         return (
           <div className="card" key={k}>
             <div className="row" style={{ marginBottom: 10 }}>
               <h2 style={{ margin: 0 }}>Week {weekLabel(k)}</h2>
-              <span className="right gold" style={{ fontWeight: 700 }}>{fmt(total)}</span>
+              <span className="right row" style={{ gap: 10 }}>
+                {pending > 0 && <span className="badge pend">{pending} pending</span>}
+                <span className="gold" style={{ fontWeight: 700 }}>{fmt(total)}</span>
+              </span>
             </div>
             <table>
-              <thead><tr><th>Date</th><th>Description</th><th>Claimed by</th><th className="num">Amount</th><th className="ctr">Receipt</th>{canManage && <th></th>}</tr></thead>
+              <thead><tr><th>Date</th><th>Description</th><th>Claimed by</th><th className="num">Amount</th><th className="ctr">Receipt</th><th className="ctr">Status</th>{canManage && <th></th>}</tr></thead>
               <tbody>
                 {items.map((x) => (
                   <tr key={x.id}>
@@ -103,7 +114,12 @@ export default function Expenses() {
                     <td className="muted">{x.player_first || "—"}</td>
                     <td className="num">{fmt(x.amount_cents)}</td>
                     <td className="ctr">{x.has_receipt ? <button className="linkbtn" onClick={() => viewReceipt(x.id)}>View</button> : <span className="muted">—</span>}</td>
-                    {canManage && <td className="num"><button className="ghost small danger" onClick={() => del(x.id)}>Delete</button></td>}
+                    <td className="ctr"><ExpStatus s={x.status} /></td>
+                    {canManage && <td className="num" style={{ whiteSpace: "nowrap" }}>
+                      {x.status === "pending"
+                        ? <><button className="small pos" onClick={() => approve(x.id)}>Approve</button> <button className="ghost small danger" onClick={() => reject(x.id)}>Reject</button></>
+                        : <button className="ghost small danger" onClick={() => del(x.id)}>Delete</button>}
+                    </td>}
                   </tr>
                 ))}
               </tbody>
