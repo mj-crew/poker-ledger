@@ -20,6 +20,7 @@ import settlementRoutes from "./routes/settlement.routes.js";
 import resultsRoutes from "./routes/results.routes.js";
 import visionRoutes from "./routes/vision.routes.js";
 import settingsRoutes from "./routes/settings.routes.js";
+import expensesRoutes from "./routes/expenses.routes.js";
 
 export function buildServer() {
   // 15 MB body limit so base64-encoded screenshots fit.
@@ -54,6 +55,7 @@ export function buildServer() {
   app.register(resultsRoutes, { prefix: "/api" });
   app.register(visionRoutes, { prefix: "/api" });
   app.register(settingsRoutes, { prefix: "/api" });
+  app.register(expensesRoutes, { prefix: "/api" });
 
   // In production the same service serves the built front-end (single origin, no
   // CORS). Unknown non-API paths fall back to index.html for client-side routing.

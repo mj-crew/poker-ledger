@@ -7,6 +7,7 @@ import MyAccount from "./pages/MyAccount.jsx";
 import AccountDetails from "./pages/AccountDetails.jsx";
 import Stats from "./pages/Stats.jsx";
 import Results from "./pages/Results.jsx";
+import Expenses from "./pages/Expenses.jsx";
 import AdminTournaments from "./pages/AdminTournaments.jsx";
 import AdminSettlement from "./pages/AdminSettlement.jsx";
 import AdminMembers from "./pages/AdminMembers.jsx";
@@ -30,6 +31,7 @@ function Nav() {
       </div>
       <NavLink to="/" end>Dashboard</NavLink>
       <NavLink to="/results">Results</NavLink>
+      <NavLink to="/expenses">Expenses</NavLink>
       <NavLink to="/account">My Balance</NavLink>
       <NavLink to="/stats">My Stats</NavLink>
       <NavLink to="/my-account">My Account</NavLink>
@@ -81,6 +83,7 @@ export default function App() {
       <Route path="/stats" element={<Protected><Stats /></Protected>} />
       <Route path="/my-account" element={<Protected><AccountDetails /></Protected>} />
       <Route path="/results" element={<Protected><Results /></Protected>} />
+      <Route path="/expenses" element={<Protected><Expenses /></Protected>} />
       <Route path="/admin" element={<Navigate to="/admin/tournaments" replace />} />
       <Route path="/admin/tournaments" element={<Protected need={NIGHTS_CAPS}><AdminTournaments /></Protected>} />
       <Route path="/admin/settlement" element={<Protected need={SETTLE_CAPS}><AdminSettlement /></Protected>} />

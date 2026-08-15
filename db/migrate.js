@@ -78,6 +78,18 @@ async function main() {
     // linked to a player's PayID, shown to whoever needs to pay them.
     "ALTER TABLE players ADD COLUMN IF NOT EXISTS email TEXT",
     "ALTER TABLE players ADD COLUMN IF NOT EXISTS payid TEXT",
+    // Expenses — money the club spends, deducted from rake. Receipt stored as a
+    // data: URL. player_id = who the expense is allocated to (optional).
+    `CREATE TABLE IF NOT EXISTS expenses (
+       id BIGSERIAL PRIMARY KEY,
+       description TEXT NOT NULL,
+       amount_cents INTEGER NOT NULL,
+       player_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
+       receipt_data_url TEXT,
+       played_on DATE NOT NULL DEFAULT CURRENT_DATE,
+       created_by BIGINT,
+       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+     )`,
   ];
   for (const a of alters) await pool.query(a);
 

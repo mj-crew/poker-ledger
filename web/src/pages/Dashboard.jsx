@@ -1,6 +1,34 @@
 import { useEffect, useState, useRef } from "react";
-import { api, fmt, runningWeekLabel, transferStatus } from "../api";
+import { api, fmt, runningWeekLabel, runningWeekBounds, transferStatus } from "../api";
 import TournamentStatus from "../components/TournamentStatus.jsx";
+
+const toLocal = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s)); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(s); };
+
+// Weekly rake collected (allocated chips − chips in play) minus this week's expenses.
+function RakeSummary({ period }) {
+  const [rake, setRake] = useState(null);
+  const [expWk, setExpWk] = useState(0);
+  useEffect(() => {
+    api.get("/clubgg/rake").then(setRake).catch(() => {});
+    api.get("/expenses").then((rows) => {
+      const { start, end } = runningWeekBounds(period);
+      setExpWk(rows.filter((x) => { const d = toLocal(x.played_on); return d >= start && d <= end; }).reduce((s, x) => s + x.amount_cents, 0));
+    }).catch(() => {});
+  }, [period]);
+  if (!rake) return null;
+  const net = rake.rake_cents - expWk;
+  return (
+    <div className="card">
+      <h2 style={{ margin: 0 }}>Weekly rake collected</h2>
+      <p className="sub" style={{ margin: "4px 0 12px" }}>Rake = allocated chips − chips in play. Expenses come out of it.</p>
+      <div className="tiles">
+        <div className="tile"><span className="lbl">Rake collected</span><div className="tval">{fmt(rake.rake_cents)}</div></div>
+        <div className="tile"><span className="lbl">Expenses</span><div className="tval">{fmt(expWk)}</div></div>
+        <div className="tile"><span className="lbl">Net rake</span><div className={"tval " + (net < 0 ? "neg" : "pos")}>{fmt(net)}</div></div>
+      </div>
+    </div>
+  );
+}
 
 const PLACE = ["1st", "2nd", "3rd", "4th", "5th"];
 
@@ -112,6 +140,8 @@ export default function Dashboard() {
         </table>
         <p className="sub" style={{ marginTop: 10 }}>Tournaments + ClubGG combined. Positive = owed to you · Negative = you owe. Settled weekly.</p>
       </div>
+
+      <RakeSummary period={period} />
 
       {period?.transfers?.length > 0 && (
         <div className="card">

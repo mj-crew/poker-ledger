@@ -57,6 +57,17 @@ export default async function settlementRoutes(app) {
     return rows.filter((r) => r.screen_name); // only members with a ClubGG name
   });
 
+  // Weekly rake collected = total allocated chips − current chips in play (live:
+  // interim balances; at settlement: finishing stacks). Visible to everyone.
+  app.get("/clubgg/rake", { preHandler: [app.authenticate] }, async () => {
+    const r = (await query(
+      `SELECT COALESCE(SUM(clubgg_allocation_cents), 0)::int AS allocated_cents,
+              COALESCE(SUM(COALESCE(clubgg_interim_cents, clubgg_balance_cents)), 0)::int AS chips_cents
+       FROM players WHERE active=TRUE`
+    )).rows[0];
+    return { allocated_cents: r.allocated_cents, chips_cents: r.chips_cents, rake_cents: r.allocated_cents - r.chips_cents };
+  });
+
   // Save the entered ClubGG allocation + finishing stacks + rake (settles at lock).
   const clubggBody = z.object({
     balances: z.array(z.object({
