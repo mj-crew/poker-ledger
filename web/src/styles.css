@@ -199,6 +199,19 @@ tr:last-child td { border-bottom: none; }
 .badge.ok { background: rgba(53,192,122,.15); color: #58d999; }
 .badge.pend { background: rgba(224,168,60,.16); color: #f0be5e; }
 
+/* Weekly settlement recap (My Balance) — one collapsible block per week. */
+.recap { border:1px solid var(--line); border-radius:11px; background:var(--surface-2); padding:0 14px; margin-top:10px; }
+.recap summary { display:flex; align-items:center; gap:10px; cursor:pointer; list-style:none; padding:12px 0; }
+.recap summary::-webkit-details-marker { display:none; }
+.recap summary::before { content:"▸"; color:var(--muted); font-size:12px; transition:transform .15s; }
+.recap[open] summary::before { transform:rotate(90deg); }
+.recap[open] summary { border-bottom:1px solid var(--line); margin-bottom:12px; }
+.recap > :last-child { padding-bottom:14px; }
+.recapgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px 36px; }
+@media (max-width:640px) { .recapgrid { grid-template-columns:1fr; } }
+.recapline { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:3px 0; }
+.recapline .strong { color:var(--ink); font-weight:700; }
+
 /* ClubGG weekly-report import panel + its reconciliation report. */
 .ggimport { border:1px dashed var(--line-2); border-radius:11px; padding:11px 13px; margin-bottom:14px; background:var(--surface-2); }
 .ggrecon { margin-top:11px; border-top:1px solid var(--line); padding-top:10px; }

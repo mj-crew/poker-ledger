@@ -151,6 +151,23 @@ async function main() {
     // midweek position stays authoritative until settlement day.
     "ALTER TABLE players ALTER COLUMN clubgg_balance_cents DROP NOT NULL",
     "ALTER TABLE players ALTER COLUMN clubgg_balance_cents DROP DEFAULT",
+    // Per-player snapshot of the settlement math, written at lock time — the
+    // live players.* columns are wiped by the weekly reset, so recaps need
+    // their own frozen copy for the transparency view on My Balance.
+    `CREATE TABLE IF NOT EXISTS settlement_recaps (
+       id BIGSERIAL PRIMARY KEY,
+       period_id BIGINT NOT NULL REFERENCES settlement_periods(id) ON DELETE CASCADE,
+       player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+       allocation_cents INTEGER NOT NULL DEFAULT 0,
+       finishing_cents INTEGER,
+       rake_cents INTEGER NOT NULL DEFAULT 0,
+       expense_share_cents INTEGER NOT NULL DEFAULT 0,
+       expense_claimed_cents INTEGER NOT NULL DEFAULT 0,
+       clubgg_net_cents INTEGER NOT NULL DEFAULT 0,
+       tournaments_cents INTEGER NOT NULL DEFAULT 0,
+       total_cents INTEGER NOT NULL DEFAULT 0,
+       UNIQUE (period_id, player_id)
+     )`,
   ];
   for (const a of alters) await pool.query(a);
 

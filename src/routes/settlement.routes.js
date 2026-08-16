@@ -305,8 +305,11 @@ export default async function settlementRoutes(app) {
     // (their chip stack minus the weekly allocation). ClubGG is written to the
     // ledger here so the combined total settles and the weekly reset zeroes it.
     const combined = new Map();
-    for (const r of (await query("SELECT player_id, balance_cents FROM player_balances")).rows)
+    const tournamentsBal = new Map(); // tournaments-only part, kept for the recap snapshot
+    for (const r of (await query("SELECT player_id, balance_cents FROM player_balances")).rows) {
       combined.set(r.player_id, (combined.get(r.player_id) || 0) + r.balance_cents);
+      tournamentsBal.set(r.player_id, r.balance_cents);
+    }
     // Claimed expenses for this week are covered prorata by each player's rake
     // share and reimbursed to whoever claimed them (stays zero-sum).
     const players = (await query("SELECT id AS player_id, clubgg_balance_cents, clubgg_interim_cents, clubgg_rake_cents, clubgg_allocation_cents FROM players WHERE active=TRUE")).rows;
@@ -357,6 +360,19 @@ export default async function settlementRoutes(app) {
         await c.query(
           "INSERT INTO settlements (period_id, from_player_id, to_player_id, amount_cents) VALUES ($1,$2,$3,$4)",
           [p.id, t.from_player_id, t.to_player_id, t.amount_cents]
+        );
+      }
+      // Snapshot each player's settlement line for the weekly recap on My
+      // Balance — the live columns are wiped by the reset, this copy isn't.
+      for (const pl of players) {
+        const tourney = tournamentsBal.get(pl.player_id) || 0;
+        const net = clubggNet.get(pl.player_id) || 0;
+        await c.query(
+          `INSERT INTO settlement_recaps (period_id, player_id, allocation_cents, finishing_cents, rake_cents,
+             expense_share_cents, expense_claimed_cents, clubgg_net_cents, tournaments_cents, total_cents)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [p.id, pl.player_id, pl.clubgg_allocation_cents, pl.clubgg_balance_cents, pl.clubgg_rake_cents,
+           shares[pl.player_id] || 0, claimed[pl.player_id] || 0, net, tourney, tourney + net]
         );
       }
       return p;

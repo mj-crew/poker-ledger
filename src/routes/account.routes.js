@@ -86,6 +86,51 @@ export default async function accountRoutes(app) {
   // Lifetime / period performance stats for the logged-in player, computed from
   // the immutable tournament record (survives weekly balance resets). Optional
   // ?from=YYYY-MM-DD&to=YYYY-MM-DD filter on the tournament's played_on date.
+  // Weekly settlement recaps — after a week is locked, every player can see
+  // their own line of the settlement math (frozen at lock time), their
+  // transfers, and the week's transaction activity. Transparency view.
+  app.get("/account/recaps", { preHandler: [app.authenticate] }, async (req) => {
+    const me = req.user.id;
+    const periods = (await query(
+      "SELECT id, label, starts_on, ends_on, status, locked_at FROM settlement_periods WHERE status IN ('locked','settled') ORDER BY id DESC LIMIT 12"
+    )).rows;
+
+    const out = [];
+    for (const p of periods) {
+      const recap = (await query(
+        `SELECT allocation_cents, finishing_cents, rake_cents, expense_share_cents, expense_claimed_cents,
+                clubgg_net_cents, tournaments_cents, total_cents
+         FROM settlement_recaps WHERE period_id=$1 AND player_id=$2`,
+        [p.id, me]
+      )).rows[0] || null;
+
+      const transfers = (await query(
+        `SELECT s.id, s.amount_cents, s.from_player_id, s.to_player_id, s.payer_marked_at, s.receiver_confirmed_at,
+                f.name AS from_name, r.name AS to_name
+         FROM settlements s JOIN players f ON f.id=s.from_player_id JOIN players r ON r.id=s.to_player_id
+         WHERE s.period_id=$1 AND (s.from_player_id=$2 OR s.to_player_id=$2)
+         ORDER BY s.amount_cents DESC`,
+        [p.id, me]
+      )).rows;
+
+      // The week's activity: tournament entries by played date, plus the ClubGG
+      // fold-in written at lock. New-week offsets are bookkeeping, not activity.
+      const activity = (await query(
+        `SELECT le.kind, le.amount_cents, le.note, le.created_at, t.game_type, t.played_on
+         FROM ledger_entries le LEFT JOIN tournaments t ON t.id=le.tournament_id
+         WHERE le.player_id=$1 AND (
+           (t.played_on IS NOT NULL AND $2::date IS NOT NULL AND t.played_on BETWEEN $2 AND $3)
+           OR (le.kind='clubgg' AND le.note = $4)
+         )
+         ORDER BY COALESCE(t.played_on::text, le.created_at::text), le.id`,
+        [me, p.starts_on ?? null, p.ends_on ?? null, `ClubGG week — ${p.label ?? "settlement"}`]
+      )).rows;
+
+      if (recap || transfers.length || activity.length) out.push({ ...p, recap, transfers, activity });
+    }
+    return out;
+  });
+
   app.get("/account/stats", { preHandler: [app.authenticate] }, async (req) => {
     const me = req.user.id;
     const { from, to } = req.query || {};
