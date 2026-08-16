@@ -34,7 +34,12 @@ export default async function accountRoutes(app) {
     const me = req.user.id;
 
     const balance = (await query("SELECT balance_cents FROM player_balances WHERE player_id=$1", [me])).rows[0]?.balance_cents ?? 0;
-    const cg = (await query("SELECT clubgg_interim_cents, clubgg_allocation_cents FROM players WHERE id=$1", [me])).rows[0] || {};
+    // The "current GG stack" is the end-of-week balance once entered, else the
+    // midweek position (field name kept for the frontend).
+    const cg = (await query(
+      "SELECT COALESCE(clubgg_balance_cents, clubgg_interim_cents) AS clubgg_interim_cents, clubgg_allocation_cents FROM players WHERE id=$1",
+      [me]
+    )).rows[0] || {};
 
     const ledger = (
       await query(

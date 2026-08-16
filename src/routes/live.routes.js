@@ -60,12 +60,15 @@ export default async function liveRoutes(app) {
     return { tournaments: out };
   });
 
-  // Group standings — everyone's current net balance (tournaments + ClubGG net),
-  // outstanding and unsettled. ClubGG net = interim stack − allocation.
+  // Group standings — everyone's current net balance (tournaments + ClubGG net).
+  // ClubGG stack: end-of-week balance once entered, else the midweek position,
+  // else the allocation (no movement).
   app.get("/standings", { preHandler: [app.authenticate] }, async () => {
     const { rows } = await query(
       `SELECT pb.player_id, pb.name,
-              pb.balance_cents + COALESCE(p.clubgg_interim_cents - p.clubgg_allocation_cents, 0) AS balance_cents
+              pb.balance_cents
+                + COALESCE(p.clubgg_balance_cents, p.clubgg_interim_cents, p.clubgg_allocation_cents)
+                - p.clubgg_allocation_cents AS balance_cents
        FROM player_balances pb JOIN players p ON p.id = pb.player_id
        ORDER BY balance_cents DESC, pb.name`
     );

@@ -40,9 +40,12 @@ export default async function settlementRoutes(app) {
        FROM players p LEFT JOIN player_balances pb ON pb.player_id=p.id
        WHERE p.active=TRUE ORDER BY p.name`
     )).rows;
-    // Net = (finishing stack − allocation) + rake paid (rebated back).
+    // Effective stack: the end-of-week balance once entered (settlement day),
+    // otherwise the midweek position, otherwise the allocation (nothing played).
+    // Net = (effective − allocation) + rake paid (rebated back).
     const players = rows.map((r) => {
-      const net = (r.clubgg_balance_cents - r.clubgg_allocation_cents) + r.clubgg_rake_cents;
+      const effective = r.clubgg_balance_cents ?? r.clubgg_interim_cents ?? r.clubgg_allocation_cents;
+      const net = (effective - r.clubgg_allocation_cents) + r.clubgg_rake_cents;
       return { ...r, net_cents: net, combined_cents: (r.ledger_balance_cents || 0) + net };
     });
     return { allocation_cents: alloc, net_sum: players.reduce((s, p) => s + p.net_cents, 0), players };
@@ -65,7 +68,7 @@ export default async function settlementRoutes(app) {
   app.get("/clubgg/rake", { preHandler: [app.authenticate] }, async () => {
     const r = (await query(
       `SELECT COALESCE(SUM(clubgg_allocation_cents), 0)::int AS allocated_cents,
-              COALESCE(SUM(COALESCE(clubgg_interim_cents, clubgg_balance_cents)), 0)::int AS chips_cents
+              COALESCE(SUM(COALESCE(clubgg_balance_cents, clubgg_interim_cents, clubgg_allocation_cents)), 0)::int AS chips_cents
        FROM players WHERE active=TRUE`
     )).rows[0];
     return { allocated_cents: r.allocated_cents, chips_cents: r.chips_cents, rake_cents: r.allocated_cents - r.chips_cents };
@@ -75,7 +78,7 @@ export default async function settlementRoutes(app) {
   const clubggBody = z.object({
     balances: z.array(z.object({
       player_id: z.number().int(),
-      clubgg_balance_cents: z.number().int().min(0),
+      clubgg_balance_cents: z.number().int().min(0).nullable(), // null until settlement day
       clubgg_rake_cents: z.number().int().min(0).default(0),
       clubgg_allocation_cents: z.number().int().min(0).optional(),
       clubgg_interim_cents: z.number().int().min(0).nullable().optional(), // set only when present
@@ -306,7 +309,13 @@ export default async function settlementRoutes(app) {
       combined.set(r.player_id, (combined.get(r.player_id) || 0) + r.balance_cents);
     // Claimed expenses for this week are covered prorata by each player's rake
     // share and reimbursed to whoever claimed them (stays zero-sum).
-    const players = (await query("SELECT id AS player_id, clubgg_balance_cents, clubgg_rake_cents, clubgg_allocation_cents FROM players WHERE active=TRUE")).rows;
+    const players = (await query("SELECT id AS player_id, clubgg_balance_cents, clubgg_interim_cents, clubgg_rake_cents, clubgg_allocation_cents FROM players WHERE active=TRUE")).rows;
+    // Settlement locks on END-OF-WEEK balances only. A lingering midweek
+    // position with no finishing stack means the table isn't ready to lock.
+    const pending = players.filter((p) => p.clubgg_balance_cents == null && p.clubgg_interim_cents != null);
+    if (pending.length) {
+      return reply.code(400).send({ error: "Enter the ClubGG end-of-week balances first — some players only have a midweek position." });
+    }
     const claimed = {};
     let totalClaimed = 0;
     if (b.starts_on && b.ends_on) {
@@ -318,7 +327,9 @@ export default async function settlementRoutes(app) {
     const shares = allocateProrata(players.map((p) => ({ id: p.player_id, weight: p.clubgg_rake_cents })), totalClaimed);
     const clubggNet = new Map();
     for (const p of players) {
-      const net = (p.clubgg_balance_cents - p.clubgg_allocation_cents) + p.clubgg_rake_cents
+      // NULL finishing stack = didn't touch their chips → stack is the allocation.
+      const finishing = p.clubgg_balance_cents ?? p.clubgg_allocation_cents;
+      const net = (finishing - p.clubgg_allocation_cents) + p.clubgg_rake_cents
         - (shares[p.player_id] || 0) + (claimed[p.player_id] || 0);
       clubggNet.set(p.player_id, net);
       combined.set(p.player_id, (combined.get(p.player_id) || 0) + net);
@@ -399,8 +410,10 @@ export default async function settlementRoutes(app) {
         await c.query("INSERT INTO ledger_entries (player_id, kind, amount_cents, note) VALUES ($1,'settlement',$2,$3)", [t.from_player_id, t.amount_cents, `New week — ${period.label ?? "period " + id}`]);
         await c.query("INSERT INTO ledger_entries (player_id, kind, amount_cents, note) VALUES ($1,'settlement',$2,$3)", [t.to_player_id, -t.amount_cents, `New week — ${period.label ?? "period " + id}`]);
       }
-      // Re-allocate ClubGG chips for the new week (everyone back to the default allocation, rake cleared).
-      await c.query("UPDATE players SET clubgg_allocation_cents=$1, clubgg_balance_cents=$1, clubgg_rake_cents=0", [alloc]);
+      // Re-allocate ClubGG chips for the new week: allocation back to default,
+      // rake cleared, and both stack readings emptied — the finishing stack
+      // stays NULL until settlement day, midweek until the first screenshot.
+      await c.query("UPDATE players SET clubgg_allocation_cents=$1, clubgg_balance_cents=NULL, clubgg_interim_cents=NULL, clubgg_rake_cents=0", [alloc]);
       await c.query("UPDATE settlement_periods SET balances_reset_at=now() WHERE id=$1", [id]);
     });
     return { ok: true };

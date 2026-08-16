@@ -147,8 +147,28 @@ async function main() {
        week_start DATE NOT NULL,
        week_end DATE NOT NULL
      )`,
+    // The finishing stack is now nullable: NULL = "not entered yet", so the
+    // midweek position stays authoritative until settlement day.
+    "ALTER TABLE players ALTER COLUMN clubgg_balance_cents DROP NOT NULL",
+    "ALTER TABLE players ALTER COLUMN clubgg_balance_cents DROP DEFAULT",
   ];
   for (const a of alters) await pool.query(a);
+
+  // One-time data fixes — each runs exactly once per database (the alters above
+  // are idempotent and re-run every boot; these must not).
+  await pool.query("CREATE TABLE IF NOT EXISTS one_time_migrations (key TEXT PRIMARY KEY, run_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+  const oneTimers = [
+    // Transition to nullable finishing stacks: an untouched stack (still equal
+    // to the allocation it was reset to) means "not entered", not "broke even".
+    ["2026-08-16-gg-balance-nullable", "UPDATE players SET clubgg_balance_cents=NULL WHERE clubgg_balance_cents=clubgg_allocation_cents"],
+  ];
+  for (const [key, sql] of oneTimers) {
+    const done = await pool.query("SELECT 1 FROM one_time_migrations WHERE key=$1", [key]);
+    if (done.rows.length) continue;
+    await pool.query(sql); // fix first, mark after — a failed fix retries next boot
+    await pool.query("INSERT INTO one_time_migrations (key) VALUES ($1) ON CONFLICT DO NOTHING", [key]);
+    console.log(`One-time migration: ${key}`);
+  }
 
   if (seed) {
     const { rows } = await pool.query("SELECT count(*)::int AS n FROM players");

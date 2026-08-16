@@ -30,7 +30,7 @@ export default function AdminSettlement() {
     setCg(d);
     setCgAllo(Object.fromEntries(d.players.map((p) => [p.player_id, (p.clubgg_allocation_cents / 100).toString()])));
     setCgInterim(Object.fromEntries(d.players.map((p) => [p.player_id, p.clubgg_interim_cents != null ? (p.clubgg_interim_cents / 100).toString() : ""])));
-    setCgBal(Object.fromEntries(d.players.map((p) => [p.player_id, (p.clubgg_balance_cents / 100).toString()])));
+    setCgBal(Object.fromEntries(d.players.map((p) => [p.player_id, p.clubgg_balance_cents != null ? (p.clubgg_balance_cents / 100).toString() : ""])));
     setCgRake(Object.fromEntries(d.players.map((p) => [p.player_id, ((p.clubgg_rake_cents || 0) / 100).toString()])));
   }
   useEffect(() => {
@@ -136,28 +136,38 @@ export default function AdminSettlement() {
   const rakeCentsOf = (pid) => Math.round((parseFloat(cgRake[pid]) || 0) * 100);
   const shares = allocateProrata((cg?.players || []).map((p) => ({ id: p.player_id, weight: rakeCentsOf(p.player_id) })), totalClaimed);
 
-  // ClubGG rows: net = (finishing − allocation) + rake − prorata expense share + reimbursements.
+  // ClubGG rows. The effective stack is the END-OF-WEEK balance once entered
+  // (settlement day), until then the MIDWEEK position, else the allocation.
+  // Net rake back = rake − prorata expense share + reimbursements;
+  // ClubGG net = (effective − allocation) + net rake back.
   const cgAlloc = cg?.allocation_cents ?? 200000; // default, used as the header hint
   const cgRows = (cg?.players || []).map((p) => {
     const allo = Math.round((parseFloat(cgAllo[p.player_id]) || 0) * 100);
-    const bal = Math.round((parseFloat(cgBal[p.player_id]) || 0) * 100);
+    const bRaw = cgBal[p.player_id];
+    const balEntered = bRaw !== "" && bRaw != null;
+    const bal = balEntered ? Math.round((parseFloat(bRaw) || 0) * 100) : null;
     const rake = Math.round((parseFloat(cgRake[p.player_id]) || 0) * 100);
     const iRaw = cgInterim[p.player_id];
     const interim = iRaw === "" || iRaw == null ? null : Math.round((parseFloat(iRaw) || 0) * 100);
+    const effective = balEntered ? bal : (interim ?? allo);
     const expenseEffect = (claimedMap[p.player_id] || 0) - (shares[p.player_id] || 0); // reimbursed − covered
-    const net = (bal - allo) + rake + expenseEffect;
-    return { ...p, allo, bal, rake, interim, expenseEffect, net, combined: (p.ledger_balance_cents || 0) + net };
+    const netRakeBack = rake + expenseEffect;
+    const net = (effective - allo) + netRakeBack;
+    return { ...p, allo, bal, balEntered, rake, interim, expenseEffect, netRakeBack, net, combined: (p.ledger_balance_cents || 0) + net };
   });
   const cgNetSum = cgRows.reduce((s, r) => s + r.net, 0);
   const tone = (c) => (c > 0 ? "pos" : c < 0 ? "neg" : "");
-  // ClubGG must be saved (no unsaved edits) and balanced (nets total $0) to lock.
+  // Lock needs: saved (no unsaved edits), end-of-week balances in (no lingering
+  // midweek positions), and balanced (nets total $0).
   const cgDirty = cgRows.some((r) => r.bal !== r.clubgg_balance_cents || r.rake !== (r.clubgg_rake_cents || 0) || r.allo !== r.clubgg_allocation_cents);
+  const cgMidweekPending = cgRows.some((r) => !r.balEntered && r.interim != null);
   const lockReasons = [];
   if (!canLockNow) lockReasons.push(`this week ends ${lastDayStr} — lock opens then`);
   if (!cg) lockReasons.push("ClubGG still loading");
   else if (cgDirty) lockReasons.push("save the ClubGG balances first");
+  else if (cgMidweekPending) lockReasons.push("enter the ClubGG end-of-week balances (some players only have a midweek position)");
   else if (cgNetSum !== 0) lockReasons.push(`ClubGG nets must total $0 (now ${fmt(cgNetSum)})`);
-  const canLock = canLockNow && !!cg && !cgDirty && cgNetSum === 0;
+  const canLock = canLockNow && !!cg && !cgDirty && !cgMidweekPending && cgNetSum === 0;
 
   return (
     <>
@@ -173,8 +183,10 @@ export default function AdminSettlement() {
             </span>
           </div>
           <p className="sub" style={{ margin: "6px 0 12px" }}>
-            Enter each player's allocation (defaults to {fmt(cgAlloc)}, adjust if it differed), their Sunday finishing
-            stack, and the cash-game rake they paid (rebated back). Net = (finishing − allocation) + rake − prorata expense share + expenses you claimed. Folds into the settlement when you lock.
+            During the week the <strong>midweek position</strong> drives the numbers. On settlement day, enter (or import)
+            the <strong>end-of-week balance</strong> — once it's in, the midweek column stops counting and greys out.
+            Net rake back = rake − prorata expense share + expenses you claimed;
+            ClubGG net = (stack − allocation) + net rake back. Folds into the settlement when you lock.
           </p>
 
           <div className="ggimport">
@@ -258,17 +270,20 @@ export default function AdminSettlement() {
           <table>
             <thead><tr>
               <th>Player</th><th className="ctr">ClubGG Weekly Allocation</th><th className="ctr">Midweek Club GG Cash Position</th><th className="ctr">ClubGG End of the week balance</th><th className="ctr">Full rake contribution $</th><th className="ctr">Club GG Prorata weekly expenses $</th>
-              <th className="ctr">ClubGG Net Rake Back $</th><th className="ctr">Pokerstars Tournaments $</th><th className="ctr">Total</th>
+              <th className="ctr">ClubGG Net Rake Back $</th><th className="ctr">ClubGG Net (after expenses &amp; rake back)</th><th className="ctr">Pokerstars Tournaments $</th><th className="ctr">Total</th>
             </tr></thead>
             <tbody>
               {cgRows.map((r) => (
                 <tr key={r.player_id}>
                   <td>{r.name}{r.clubgg_handle && <div className="muted" style={{ fontSize: 12 }}>{r.clubgg_handle}</div>}</td>
                   <td className="ctr"><input type="number" value={cgAllo[r.player_id] ?? ""} onChange={(e) => setCgAllo((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 90 }} /></td>
-                  <td className="ctr"><input type="number" placeholder="—" value={cgInterim[r.player_id] ?? ""} onChange={(e) => setCgInterim((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 100 }} /></td>
-                  <td className="ctr"><input type="number" value={cgBal[r.player_id] ?? ""} onChange={(e) => setCgBal((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 100 }} /></td>
+                  <td className="ctr"><input type="number" placeholder="—" disabled={r.balEntered}
+                    title={r.balEntered ? "End-of-week balance is entered — the midweek position no longer counts" : "Live stack during the week (from screenshots)"}
+                    value={cgInterim[r.player_id] ?? ""} onChange={(e) => setCgInterim((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 100 }} /></td>
+                  <td className="ctr"><input type="number" placeholder="settle day" value={cgBal[r.player_id] ?? ""} onChange={(e) => setCgBal((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 100 }} /></td>
                   <td className="ctr"><input type="number" value={cgRake[r.player_id] ?? ""} onChange={(e) => setCgRake((m) => ({ ...m, [r.player_id]: e.target.value }))} style={{ width: 90 }} /></td>
                   <td className={"ctr " + tone(r.expenseEffect)}>{r.expenseEffect ? fmt(r.expenseEffect) : "—"}</td>
+                  <td className={"ctr " + tone(r.netRakeBack)}>{fmt(r.netRakeBack)}</td>
                   <td className={"ctr " + tone(r.net)}>{fmt(r.net)}</td>
                   <td className={"ctr " + tone(r.ledger_balance_cents || 0)}>{fmt(r.ledger_balance_cents || 0)}</td>
                   <td className={"ctr " + tone(r.combined)}>{fmt(r.combined)}</td>
