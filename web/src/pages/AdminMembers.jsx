@@ -98,8 +98,8 @@ export default function AdminMembers() {
         <h2>All members</h2>
         <table className="fixed">
           <colgroup>
-            <col style={{ width: "12%" }} /><col style={{ width: "12%" }} /><col style={{ width: "13%" }} /><col style={{ width: "16%" }} /><col style={{ width: "13%" }} />
-            <col style={{ width: "11%" }} /><col style={{ width: "11%" }} /><col style={{ width: "7%" }} />
+            <col style={{ width: "13%" }} /><col style={{ width: "12%" }} /><col style={{ width: "12%" }} /><col style={{ width: "17%" }} /><col style={{ width: "14%" }} />
+            <col style={{ width: "11%" }} /><col style={{ width: "11%" }} /><col style={{ width: "10%" }} />
           </colgroup>
           <thead><tr><th>First name</th><th>Last name</th><th>Phone</th><th>PokerStars screen name</th><th>ClubGG name</th><th>Role</th><th>Status</th><th></th></tr></thead>
           <tbody>
@@ -112,12 +112,12 @@ export default function AdminMembers() {
                 <td className="muted">{p.clubgg_handle || "—"}</td>
                 <td><RoleBadge role={p.role} /></td>
                 <td><span className={"badge " + (p.active ? "ok" : "gray")}>{p.active ? "active" : "inactive"}</span></td>
-                <td className="num" style={{ whiteSpace: "nowrap" }}>
+                <td className="rowactions">
                   {canActAs && p.active && p.id !== me?.id && (
-                    <button className="ghost small" title={`Act as ${p.first_name} — you'll see the app exactly as they do`}
-                      onClick={() => act(p)} style={{ marginRight: 6 }}>🎭</button>
+                    <button className="ghost small iconbtn" title={`Act as ${p.first_name} — you'll see the app exactly as they do`}
+                      onClick={() => act(p)}>🎭</button>
                   )}
-                  <button className="ghost small" title="Edit member" onClick={() => setEditId(p.id)}>✏️</button>
+                  <button className="ghost small iconbtn" title="Edit member" onClick={() => setEditId(p.id)}>✏️</button>
                 </td>
               </tr>
             ))}

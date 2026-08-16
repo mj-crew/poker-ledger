@@ -165,6 +165,10 @@ table.fixed { table-layout: fixed; }
 th, td { padding: 10px 10px; text-align: left; border-bottom: 1px solid var(--line); }
 th { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 700; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Right-aligned per-row icon buttons (Members). The actions column is sized to
+   hold two of them, so keep the cell tight and never let them wrap. */
+td.rowactions { text-align: right; white-space: nowrap; padding-left: 4px; padding-right: 8px; }
+td.rowactions .iconbtn + .iconbtn { margin-left: 6px; }
 td.ctr, th.ctr { text-align: center; }
 .tick { color: #21e065; font-size: 18px; font-weight: 800; line-height: 1; }
 .cross { color: #ff3838; font-size: 18px; font-weight: 800; line-height: 1; }
