@@ -79,10 +79,11 @@ export default function Dashboard() {
   const [now, setNow] = useState(Date.now());
   const timer = useRef();
 
+  const [runWeek, setRunWeek] = useState(null); // server's running week (advances only on reset)
   async function load() {
     try {
-      const [l, s, ps] = await Promise.all([api.get("/live"), api.get("/standings"), api.get("/settlement/periods")]);
-      setLive(l); setStandings(s);
+      const [l, s, ps, rw] = await Promise.all([api.get("/live"), api.get("/standings"), api.get("/settlement/periods"), api.get("/settlement/running-week")]);
+      setLive(l); setStandings(s); setRunWeek(rw);
       setPeriod(ps[0] ? await api.get(`/settlement/periods/${ps[0].id}`) : null);
     } catch { /* transient */ }
   }
@@ -121,7 +122,7 @@ export default function Dashboard() {
       <div className="card">
         <div className="row" style={{ marginBottom: 12 }}>
           <h2 style={{ margin: 0 }}>Weekly running balance</h2>
-          <span className="right sub gold">Week {runningWeekLabel(period)}</span>
+          <span className="right sub gold">Week {runningWeekLabel(runWeek ?? period)}</span>
         </div>
         <table className="fixed">
           <colgroup><col style={{ width: "70%" }} /><col style={{ width: "30%" }} /></colgroup>
@@ -141,7 +142,7 @@ export default function Dashboard() {
         <p className="sub" style={{ marginTop: 10 }}>Tournaments + ClubGG combined. Positive = owed to you · Negative = you owe. Settled weekly.</p>
       </div>
 
-      <RakeSummary period={period} />
+      <RakeSummary period={runWeek ?? period} />
 
       {period?.transfers?.length > 0 && (
         <div className="card">

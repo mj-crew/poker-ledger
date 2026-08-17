@@ -29,6 +29,41 @@ export default async function settlementRoutes(app) {
     return rows;
   });
 
+  // The week currently being accumulated ("running week"). It advances ONLY
+  // when a week is reset — never just because the calendar rolled to Monday —
+  // so on Monday you can still lock and settle the week that just finished.
+  //   • after a reset: the Monday after that period's ends_on
+  //   • before any reset: the Monday of the earliest still-unsettled activity
+  //     (oldest tournament / expense not inside a locked period), else today
+  app.get("/settlement/running-week", { preHandler: [app.authenticate] }, async () => {
+    const mondayOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); const day = x.getDay(); x.setDate(x.getDate() + (day === 0 ? -6 : 1 - day)); return x; };
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const local = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s)); return new Date(+m[1], +m[2] - 1, +m[3]); };
+
+    let base;
+    const lastReset = (await query(
+      "SELECT ends_on FROM settlement_periods WHERE balances_reset_at IS NOT NULL AND ends_on IS NOT NULL ORDER BY ends_on DESC LIMIT 1"
+    )).rows[0];
+    if (lastReset) {
+      base = local(lastReset.ends_on); base.setDate(base.getDate() + 1);
+    } else {
+      // Earliest activity not yet covered by a locked/settled period.
+      const first = (await query(
+        `SELECT MIN(d) AS d FROM (
+           SELECT t.played_on AS d FROM tournaments t WHERE t.status='finalized'
+             AND NOT EXISTS (SELECT 1 FROM settlement_periods sp WHERE sp.status IN ('locked','settled') AND t.played_on BETWEEN sp.starts_on AND sp.ends_on)
+           UNION ALL
+           SELECT e.played_on FROM expenses e WHERE e.status='approved'
+             AND NOT EXISTS (SELECT 1 FROM settlement_periods sp WHERE sp.status IN ('locked','settled') AND e.played_on BETWEEN sp.starts_on AND sp.ends_on)
+         ) x`
+      )).rows[0]?.d;
+      base = first ? local(first) : new Date();
+    }
+    const start = mondayOf(base);
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    return { starts_on: iso(start), ends_on: iso(end) };
+  });
+
   // ClubGG week: each active player's current chip stack, net vs the allocation,
   // their tournament (ledger) balance, and the combined total that will settle.
   app.get("/clubgg/week", { preHandler: [app.authenticate] }, async () => {
@@ -322,10 +357,22 @@ export default async function settlementRoutes(app) {
     const claimed = {};
     let totalClaimed = 0;
     if (b.starts_on && b.ends_on) {
+      // Only expenses claimed by a player IN the settlement (active) are shared —
+      // otherwise everyone would be charged a share while the reimbursement lands
+      // on nobody, and the lock would silently leak money.
+      const activeIds = new Set(players.map((p) => p.player_id));
+      const orphan = [];
       for (const e of (await query(
-        "SELECT player_id, amount_cents FROM expenses WHERE player_id IS NOT NULL AND status='approved' AND played_on BETWEEN $1 AND $2",
+        `SELECT e.player_id, e.amount_cents, e.description, p.name FROM expenses e LEFT JOIN players p ON p.id=e.player_id
+         WHERE e.player_id IS NOT NULL AND e.status='approved' AND e.played_on BETWEEN $1 AND $2`,
         [b.starts_on, b.ends_on]
-      )).rows) { claimed[e.player_id] = (claimed[e.player_id] || 0) + e.amount_cents; totalClaimed += e.amount_cents; }
+      )).rows) {
+        if (!activeIds.has(e.player_id)) { orphan.push(`${e.description} $${(e.amount_cents / 100).toFixed(2)} (${e.name ?? "unknown"})`); continue; }
+        claimed[e.player_id] = (claimed[e.player_id] || 0) + e.amount_cents; totalClaimed += e.amount_cents;
+      }
+      if (orphan.length) {
+        return reply.code(400).send({ error: `Expense claimed by an inactive member — reactivate them or re-assign it first: ${orphan.join("; ")}` });
+      }
     }
     const shares = allocateProrata(players.map((p) => ({ id: p.player_id, weight: p.clubgg_rake_cents })), totalClaimed);
     const clubggNet = new Map();

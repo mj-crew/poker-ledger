@@ -144,16 +144,25 @@ function mondayOf(d) {
 // period. If a week was missed, that is a PAST week (already ended) and stays the
 // target until it's locked; the current week only becomes the target once the
 // previous one is settled. With no prior reset, it's the current calendar week.
-export function runningWeekBounds(period) {
+// The week currently being accumulated. Pass the server's answer from
+// GET /settlement/running-week ({starts_on, ends_on}) — it advances only on
+// reset, never just because the calendar rolled to Monday, so last week stays
+// lockable on Monday. A settlement period is accepted too (older callers).
+export function runningWeekBounds(anchor) {
+  if (anchor?.starts_on && anchor?.ends_on && !("status" in anchor)) {
+    const start = mondayOf(toLocalDate(anchor.starts_on));
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    return { start, end };
+  }
   let base = new Date();
-  if (period?.balances_reset_at && period?.ends_on) {
-    base = new Date(toLocalDate(period.ends_on));
+  if (anchor?.balances_reset_at && anchor?.ends_on) {
+    base = new Date(toLocalDate(anchor.ends_on));
     base.setDate(base.getDate() + 1); // Monday of the week after the last reset
   }
   const start = mondayOf(base);
   const end = new Date(start); end.setDate(start.getDate() + 6);
   return { start, end };
 }
-export function runningWeekLabel(period) {
-  return weekRange(runningWeekBounds(period).start);
+export function runningWeekLabel(anchor) {
+  return weekRange(runningWeekBounds(anchor).start);
 }

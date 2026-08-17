@@ -19,9 +19,12 @@ export default function AdminSettlement() {
   const [cgRake, setCgRake] = useState({}); // player_id -> rake $ (string)
   const [allExpenses, setAllExpenses] = useState([]);
 
+  // The week being accumulated — from the server, so it only advances on reset
+  // (Monday must still let you lock the week that just finished).
+  const [runWeek, setRunWeek] = useState(null);
   async function load(selectId) {
-    const ps = await api.get("/settlement/periods");
-    setPeriods(ps);
+    const [ps, rw] = await Promise.all([api.get("/settlement/periods"), api.get("/settlement/running-week")]);
+    setPeriods(ps); setRunWeek(rw);
     const id = selectId ?? sel?.id ?? ps[0]?.id;
     if (id) openPeriod(id);
   }
@@ -92,9 +95,9 @@ export default function AdminSettlement() {
     if (!confirm(`Are you sure you want to lock this period (${activeWeek})?\n\nThis freezes everyone's balances into who-pays-whom for the week. Players can then pay & confirm.`)) return;
     setErr(""); setMsg("");
     try {
-      const { start, end } = runningWeekBounds(periods[0]);
+      const { start, end } = runningWeekBounds(runWeek ?? periods[0]);
       const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const p = await api.post("/settlement/periods/lock", { label: runningWeekLabel(periods[0]), starts_on: iso(start), ends_on: iso(end) });
+      const p = await api.post("/settlement/periods/lock", { label: runningWeekLabel(runWeek ?? periods[0]), starts_on: iso(start), ends_on: iso(end) });
       await load(p.id);
       flash("Week locked — transfers generated. Players can now pay & confirm.");
     } catch (e) { setErr(e.message); }
@@ -121,18 +124,29 @@ export default function AdminSettlement() {
   }
 
   const confirmedCount = sel?.transfers?.filter((t) => t.status === "confirmed").length ?? 0;
-  const activeWeek = runningWeekLabel(periods[0]); // rolls to next week once this one is settled + reset
-  // Locking is only allowed on/after the last day (Sunday) of the active week.
-  const weekEnd = runningWeekBounds(periods[0]).end;
+  const weekAnchor = runWeek ?? periods[0];
+  const activeWeek = runningWeekLabel(weekAnchor); // advances only when a week is reset
+  // Locking is only allowed on/after the last day (Sunday) of the active week —
+  // and stays open after that (Monday, Tuesday…) until it's actually locked.
+  const weekEnd = runningWeekBounds(weekAnchor).end;
   const lastDayStr = weekEnd.toLocaleDateString("en-GB");
   const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
   const canLockNow = todayMid.getTime() >= weekEnd.getTime();
 
   // Claimed expenses in the active week → covered prorata by rake, reimbursed to claimers.
-  const weekStart = runningWeekBounds(periods[0]).start;
+  const weekStart = runningWeekBounds(weekAnchor).start;
   const inWeek = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d)); const x = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(d); return x >= weekStart && x <= weekEnd; };
+  // Only expenses whose claimer is IN the settlement table can be shared out —
+  // otherwise the shares would be deducted from everyone with nobody visible
+  // being reimbursed, and the nets would sit at exactly −(that expense).
+  const tablePlayerIds = new Set((cg?.players || []).map((p) => p.player_id));
   const claimedMap = {}; let totalClaimed = 0;
-  for (const e of allExpenses) if (e.player_id && e.status === "approved" && inWeek(e.played_on)) { claimedMap[e.player_id] = (claimedMap[e.player_id] || 0) + e.amount_cents; totalClaimed += e.amount_cents; }
+  const orphanExpenses = []; // approved, this week, but claimer not in the table (inactive?)
+  for (const e of allExpenses) {
+    if (!(e.player_id && e.status === "approved" && inWeek(e.played_on))) continue;
+    if (!tablePlayerIds.has(e.player_id)) { orphanExpenses.push(e); continue; }
+    claimedMap[e.player_id] = (claimedMap[e.player_id] || 0) + e.amount_cents; totalClaimed += e.amount_cents;
+  }
   const rakeCentsOf = (pid) => Math.round((parseFloat(cgRake[pid]) || 0) * 100);
   const shares = allocateProrata((cg?.players || []).map((p) => ({ id: p.player_id, weight: rakeCentsOf(p.player_id) })), totalClaimed);
 
@@ -157,6 +171,15 @@ export default function AdminSettlement() {
   });
   const cgNetSum = cgRows.reduce((s, r) => s + r.net, 0);
   const tone = (c) => (c > 0 ? "pos" : c < 0 ? "neg" : "");
+  // Expenses are shared prorata by rake. With no rake entered yet there's nothing
+  // to share against, so reimbursements go out unfunded and the nets sit at
+  // exactly +(claimed expenses) until the rake column is filled. Not an error —
+  // just an incomplete table — so say so instead of "must be $0".
+  const totalRake = cgRows.reduce((s, r) => s + r.rake, 0);
+  const expensesUnfunded = totalRake === 0 && totalClaimed > 0 && cgNetSum === totalClaimed;
+  const netSumHint = cgNetSum === 0 ? " ✓"
+    : expensesUnfunded ? ` — ${fmt(totalClaimed)} of expenses can't be shared yet: enter the rake first`
+    : " — must be $0 to settle";
   // Lock needs: saved (no unsaved edits), end-of-week balances in (no lingering
   // midweek positions), and balanced (nets total $0).
   const cgDirty = cgRows.some((r) => r.bal !== r.clubgg_balance_cents || r.rake !== (r.clubgg_rake_cents || 0) || r.allo !== r.clubgg_allocation_cents);
@@ -166,7 +189,9 @@ export default function AdminSettlement() {
   if (!cg) lockReasons.push("ClubGG still loading");
   else if (cgDirty) lockReasons.push("save the ClubGG balances first");
   else if (cgMidweekPending) lockReasons.push("enter the ClubGG end-of-week balances (some players only have a midweek position)");
-  else if (cgNetSum !== 0) lockReasons.push(`ClubGG nets must total $0 (now ${fmt(cgNetSum)})`);
+  else if (cgNetSum !== 0) lockReasons.push(expensesUnfunded
+    ? `enter the rake — ${fmt(totalClaimed)} of expenses can't be shared until it's in`
+    : `ClubGG nets must total $0 (now ${fmt(cgNetSum)})`);
   const canLock = canLockNow && !!cg && !cgDirty && !cgMidweekPending && cgNetSum === 0;
 
   return (
@@ -291,9 +316,17 @@ export default function AdminSettlement() {
               ))}
             </tbody>
           </table>
+          {orphanExpenses.length > 0 && (
+            <div className="err" style={{ marginTop: 12 }}>
+              ⚠ {orphanExpenses.length === 1 ? "An approved expense is" : `${orphanExpenses.length} approved expenses are`} claimed by
+              someone not in this table, so {orphanExpenses.length === 1 ? "it's" : "they're"} left out of the sharing:{" "}
+              {orphanExpenses.map((e) => `${e.description} ${fmt(e.amount_cents)} (${e.player_name || "unknown member"})`).join(" · ")}.
+              Reactivate that member or re-assign the expense in the Expenses tab.
+            </div>
+          )}
           <div className="row" style={{ marginTop: 12 }}>
             <span className={"badge " + (cgNetSum === 0 ? "ok" : "live")}>
-              ClubGG nets total {fmt(cgNetSum)}{cgNetSum === 0 ? " ✓" : " — must be $0 to settle"}
+              ClubGG nets total {fmt(cgNetSum)}{netSumHint}
             </span>
             <span className="right"><button onClick={() => saveClubgg(cgRows)}>Save ClubGG balances</button></span>
           </div>
