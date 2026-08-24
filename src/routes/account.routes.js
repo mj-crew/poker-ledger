@@ -34,12 +34,26 @@ export default async function accountRoutes(app) {
     const me = req.user.id;
 
     const balance = (await query("SELECT balance_cents FROM player_balances WHERE player_id=$1", [me])).rows[0]?.balance_cents ?? 0;
+    // Between lock and reset, the week's ClubGG net is already folded into the
+    // ledger while the chip stacks still show it too. Split it back out so the
+    // PokerStars card is tournaments-only and ClubGG is counted exactly once.
+    const lastReset = (await query("SELECT MAX(balances_reset_at) AS t FROM settlement_periods")).rows[0]?.t ?? null;
+    const gFold = (await query(
+      "SELECT COALESCE(SUM(amount_cents),0)::int AS s FROM ledger_entries WHERE player_id=$1 AND kind='clubgg' AND created_at > COALESCE($2::timestamptz, '-infinity')",
+      [me, lastReset]
+    )).rows[0].s;
+    const tournamentsBal = balance - gFold;
     // The "current GG stack" is the end-of-week balance once entered, else the
     // midweek position (field name kept for the frontend).
     const cg = (await query(
       "SELECT COALESCE(clubgg_balance_cents, clubgg_interim_cents) AS clubgg_interim_cents, clubgg_allocation_cents FROM players WHERE id=$1",
       [me]
     )).rows[0] || {};
+    // ClubGG net: once locked (fold present) the folded figure is authoritative
+    // (it includes rake back + expenses); before that, live stack − allocation.
+    const clubggNet = gFold !== 0 ? gFold
+      : cg.clubgg_interim_cents != null ? cg.clubgg_interim_cents - (cg.clubgg_allocation_cents || 0)
+      : null;
 
     const ledger = (
       await query(
@@ -76,7 +90,8 @@ export default async function accountRoutes(app) {
     ).rows;
 
     return {
-      balance_cents: balance,
+      balance_cents: tournamentsBal,          // tournaments only (ClubGG fold excluded)
+      clubgg_net_cents: clubggNet,            // ClubGG counted exactly once
       clubgg_interim_cents: cg.clubgg_interim_cents ?? null,
       clubgg_allocation_cents: cg.clubgg_allocation_cents ?? null,
       ledger, i_owe: owe, owed_to_me: owed,

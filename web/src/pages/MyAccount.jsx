@@ -130,10 +130,8 @@ export default function MyAccount() {
   if (err) return <div className="err">{err}</div>;
   if (!data) return <p className="muted">Loading…</p>;
 
-  const bal = data.balance_cents;
-  const ggInterim = data.clubgg_interim_cents;  // may be null (no GG balance yet)
-  const ggAlloc = data.clubgg_allocation_cents;
-  const ggNet = ggInterim != null ? ggInterim - (ggAlloc || 0) : null; // vs allocation
+  const bal = data.balance_cents;               // tournaments only (server splits the fold out)
+  const ggNet = data.clubgg_net_cents;          // ClubGG counted exactly once; null = nothing yet
   const total = bal + (ggNet || 0);
 
   async function act(id, path) {

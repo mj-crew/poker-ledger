@@ -71,7 +71,13 @@ export default async function settlementRoutes(app) {
     const rows = (await query(
       `SELECT p.id AS player_id, p.name, p.clubgg_balance_cents, p.clubgg_rake_cents, p.clubgg_allocation_cents, p.clubgg_interim_cents,
               (SELECT max(handle) FROM handle_aliases h WHERE h.player_id=p.id AND h.platform='clubgg') AS clubgg_handle,
-              COALESCE(pb.balance_cents, 0) AS ledger_balance_cents
+              -- tournaments only: exclude a ClubGG fold not yet offset by a reset,
+              -- or the PokerStars column double-counts it between lock and reset
+              COALESCE(pb.balance_cents, 0)
+                - COALESCE((SELECT SUM(le.amount_cents)::int FROM ledger_entries le
+                            WHERE le.player_id=p.id AND le.kind='clubgg'
+                              AND le.created_at > COALESCE((SELECT MAX(balances_reset_at) FROM settlement_periods), '-infinity')), 0)
+                AS ledger_balance_cents
        FROM players p LEFT JOIN player_balances pb ON pb.player_id=p.id
        WHERE p.active=TRUE ORDER BY p.name`
     )).rows;

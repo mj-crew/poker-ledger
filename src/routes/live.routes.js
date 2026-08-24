@@ -64,12 +64,22 @@ export default async function liveRoutes(app) {
   // ClubGG stack: end-of-week balance once entered, else the midweek position,
   // else the allocation (no movement).
   app.get("/standings", { preHandler: [app.authenticate] }, async () => {
+    // Once a week is locked its ClubGG net is folded into the ledger; until the
+    // reset clears the stacks, adding stack − allocation on top would count it
+    // twice. If a player has an un-offset fold, the ledger alone is the truth.
     const { rows } = await query(
       `SELECT pb.player_id, pb.name,
               pb.balance_cents
-                + COALESCE(p.clubgg_balance_cents, p.clubgg_interim_cents, p.clubgg_allocation_cents)
-                - p.clubgg_allocation_cents AS balance_cents
+                + CASE WHEN COALESCE(f.fold, 0) <> 0 THEN 0
+                       ELSE COALESCE(p.clubgg_balance_cents, p.clubgg_interim_cents, p.clubgg_allocation_cents)
+                            - p.clubgg_allocation_cents END AS balance_cents
        FROM player_balances pb JOIN players p ON p.id = pb.player_id
+       LEFT JOIN (
+         SELECT player_id, SUM(amount_cents)::int AS fold FROM ledger_entries
+         WHERE kind='clubgg'
+           AND created_at > COALESCE((SELECT MAX(balances_reset_at) FROM settlement_periods), '-infinity')
+         GROUP BY player_id
+       ) f ON f.player_id = pb.player_id
        ORDER BY balance_cents DESC, pb.name`
     );
     return rows;
