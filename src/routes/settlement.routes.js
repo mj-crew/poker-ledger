@@ -390,8 +390,10 @@ export default async function settlementRoutes(app) {
       clubggNet.set(p.player_id, net);
       combined.set(p.player_id, (combined.get(p.player_id) || 0) + net);
     }
+    // A week with no activity is still a week: it must be lockable so the
+    // cycle (lock → reset → next week) keeps moving. settle([]) yields no
+    // transfers; such a period is marked settled immediately (nothing to pay).
     const nonzero = [...combined].map(([player_id, balance_cents]) => ({ player_id, balance_cents })).filter((x) => x.balance_cents !== 0);
-    if (nonzero.length === 0) return reply.code(400).send({ error: "Nothing to settle — all balances are zero." });
 
     const { transfers, balanced, residual_cents } = settle(nonzero);
     if (!balanced) {
@@ -405,8 +407,8 @@ export default async function settlementRoutes(app) {
             [pid, net, `ClubGG week — ${b.label ?? "settlement"}`]);
       const p = (
         await c.query(
-          "INSERT INTO settlement_periods (label, starts_on, ends_on, status, locked_at) VALUES ($1,$2,$3,'locked',now()) RETURNING *",
-          [b.label ?? null, b.starts_on ?? null, b.ends_on ?? null]
+          "INSERT INTO settlement_periods (label, starts_on, ends_on, status, locked_at) VALUES ($1,$2,$3,$4,now()) RETURNING *",
+          [b.label ?? null, b.starts_on ?? null, b.ends_on ?? null, transfers.length ? "locked" : "settled"]
         )
       ).rows[0];
       for (const t of transfers) {

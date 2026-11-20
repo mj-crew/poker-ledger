@@ -99,7 +99,9 @@ export default function AdminSettlement() {
       const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const p = await api.post("/settlement/periods/lock", { label: runningWeekLabel(runWeek ?? periods[0]), starts_on: iso(start), ends_on: iso(end) });
       await load(p.id);
-      flash("Week locked — transfers generated. Players can now pay & confirm.");
+      flash(p.transfers?.length
+        ? "Week locked — transfers generated. Players can now pay & confirm."
+        : "Quiet week locked — nobody played, so there's nothing to pay and it's already marked settled. Click “Start new week” when you're ready.");
     } catch (e) { setErr(e.message); }
   }
 
