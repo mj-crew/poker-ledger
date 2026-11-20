@@ -101,7 +101,7 @@ export default function AdminSettlement() {
       await load(p.id);
       flash(p.transfers?.length
         ? "Week locked — transfers generated. Players can now pay & confirm."
-        : "Quiet week locked — nobody played, so there's nothing to pay and it's already marked settled. Click “Start new week” when you're ready.");
+        : "Quiet week closed — nobody played, so there was nothing to pay. It's marked settled and the next week has started.");
     } catch (e) { setErr(e.message); }
   }
 
@@ -186,15 +186,20 @@ export default function AdminSettlement() {
   // midweek positions), and balanced (nets total $0).
   const cgDirty = cgRows.some((r) => r.bal !== r.clubgg_balance_cents || r.rake !== (r.clubgg_rake_cents || 0) || r.allo !== r.clubgg_allocation_cents);
   const cgMidweekPending = cgRows.some((r) => !r.balEntered && r.interim != null);
+  // The running week only advances once its period is reset; until then the
+  // Lock card still points at it — never offer to lock the same week twice.
+  const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const alreadyLocked = periods.find((p) => p.starts_on === isoDay(weekStart) && !p.balances_reset_at);
   const lockReasons = [];
-  if (!canLockNow) lockReasons.push(`this week ends ${lastDayStr} — lock opens then`);
+  if (alreadyLocked) lockReasons.push(`this week is already locked (${alreadyLocked.status}) — open it under Periods and click “Start new week” to move on`);
+  else if (!canLockNow) lockReasons.push(`this week ends ${lastDayStr} — lock opens then`);
   if (!cg) lockReasons.push("ClubGG still loading");
   else if (cgDirty) lockReasons.push("save the ClubGG balances first");
   else if (cgMidweekPending) lockReasons.push("enter the ClubGG end-of-week balances (some players only have a midweek position)");
   else if (cgNetSum !== 0) lockReasons.push(expensesUnfunded
     ? `enter the rake — ${fmt(totalClaimed)} of expenses can't be shared until it's in`
     : `ClubGG nets must total $0 (now ${fmt(cgNetSum)})`);
-  const canLock = canLockNow && !!cg && !cgDirty && !cgMidweekPending && cgNetSum === 0;
+  const canLock = !alreadyLocked && canLockNow && !!cg && !cgDirty && !cgMidweekPending && cgNetSum === 0;
 
   return (
     <>

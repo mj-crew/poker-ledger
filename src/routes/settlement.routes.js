@@ -337,6 +337,20 @@ export default async function settlementRoutes(app) {
     const b = lockBody.parse(req.body ?? {});
     // A prior week must have started fresh (balances reset) before locking a new one,
     // otherwise last week's debts would be double-counted into this week's transfers.
+    // Never lock the same days twice — a stale page (or a double click) must
+    // not create a duplicate period over dates that are already settled.
+    if (b.starts_on && b.ends_on) {
+      const dup = (await query(
+        `SELECT id, label FROM settlement_periods
+         WHERE status IN ('locked','settled') AND starts_on IS NOT NULL AND ends_on IS NOT NULL
+           AND starts_on <= $2 AND ends_on >= $1
+         ORDER BY id LIMIT 1`,
+        [b.starts_on, b.ends_on]
+      )).rows[0];
+      if (dup) {
+        return reply.code(409).send({ error: `Those dates are already locked as "${dup.label ?? "#" + dup.id}". Refresh the page — the running week has moved on.` });
+      }
+    }
     const unreset = (await query("SELECT id, label FROM settlement_periods WHERE balances_reset_at IS NULL ORDER BY id")).rows;
     if (unreset.length) {
       const p = unreset[0];
@@ -429,6 +443,16 @@ export default async function settlementRoutes(app) {
           [p.id, pl.player_id, pl.clubgg_allocation_cents, pl.clubgg_balance_cents, pl.clubgg_rake_cents,
            shares[pl.player_id] || 0, claimed[pl.player_id] || 0, net, tourney, tourney + net]
         );
+      }
+      // Quiet week (no transfers): there is nothing to wait for, so start the
+      // next week right away — same steps as /reset-balances, minus the
+      // transfer offsets (there are none). Otherwise the running week would
+      // sit on an already-settled week until someone clicks "Start new week".
+      if (transfers.length === 0) {
+        const alloc = await allocationCents();
+        await c.query("UPDATE players SET clubgg_allocation_cents=$1, clubgg_balance_cents=NULL, clubgg_interim_cents=NULL, clubgg_rake_cents=0", [alloc]);
+        const r = await c.query("UPDATE settlement_periods SET balances_reset_at=now() WHERE id=$1 RETURNING *", [p.id]);
+        return r.rows[0];
       }
       return p;
     });
